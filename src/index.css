@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Helvetica Neue", Arial, sans-serif;
+  
+  --color-lupo-black: #1A1A1A;
+  --color-lupo-gray: #F7F7F5;
+  --color-lupo-border: #EAEAEA;
+  --color-lupo-text: #555555;
+  --color-lupo-muted: #888888;
+}
+
+@layer base {
+  body {
+    @apply font-sans text-lupo-black bg-lupo-gray antialiased selection:bg-lupo-black selection:text-white;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-[-1px] font-light;
+  }
+}

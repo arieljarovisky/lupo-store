@@ -2,10 +2,12 @@ import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ProductCard } from '../components/ProductCard';
-import { products } from '../data/products';
+import { useProductCatalog } from '../context/ProductCatalogContext';
+import type { Product } from '../context/CartContext';
 
 export function Home() {
-  const featuredProducts = products.slice(0, 4);
+  const { products, loading, error } = useProductCatalog();
+  const featuredProducts: Product[] = products.slice(0, 4);
 
   return (
     <div className="min-h-screen pt-[80px]">
@@ -72,11 +74,19 @@ export function Home() {
           </Link>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {featuredProducts.map(product => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        {loading ? (
+          <p className="text-[15px] text-lupo-text">Cargando productos…</p>
+        ) : error ? (
+          <p className="text-[15px] text-red-600">{error}</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {featuredProducts.map((product) => (
+              <div key={product.id}>
+                <ProductCard product={product} />
+              </div>
+            ))}
+          </div>
+        )}
         
         <div className="mt-12 text-center md:hidden">
           <Link to="/shop" className="inline-flex items-center text-[12px] font-semibold uppercase tracking-[1.5px] hover:opacity-70 transition-opacity border-b border-lupo-black pb-1">

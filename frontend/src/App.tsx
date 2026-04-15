@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { CartProvider } from './context/CartContext';
+import { ProductCatalogProvider } from './context/ProductCatalogContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
@@ -12,6 +13,7 @@ import { Admin } from './pages/Admin';
 export default function App() {
   return (
     <CartProvider>
+      <ProductCatalogProvider>
       <Router>
         <ScrollToTop />
         <div className="flex flex-col min-h-screen">
@@ -30,6 +32,7 @@ export default function App() {
           <Footer />
         </div>
       </Router>
+      </ProductCatalogProvider>
     </CartProvider>
   );
 }

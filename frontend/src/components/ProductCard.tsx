@@ -19,7 +19,7 @@ export function ProductCard({ product }: ProductCardProps) {
     >
       <div className="relative aspect-[3/4] bg-[#F0F0F0] rounded-[2px] overflow-hidden mb-4 border border-[#EEE]">
         <img 
-          src={product.image} 
+          src={product.image || 'https://placehold.co/600x800/f0f0f0/666?text=Sin+imagen'} 
           alt={product.name} 
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
         />

@@ -1,17 +1,23 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { ProductCard } from '../components/ProductCard';
-import { products } from '../data/products';
 import { useSearchParams } from 'react-router-dom';
+import { useProductCatalog } from '../context/ProductCatalogContext';
+import type { Product } from '../context/CartContext';
 
 export function Shop() {
+  const { products, loading, error } = useProductCatalog();
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryFilter = searchParams.get('category');
+
+  const categories = useMemo(() => {
+    const unique = [...new Set(products.map((p) => p.category))].sort();
+    return ['Todos', ...unique];
+  }, [products]);
   
-  const categories = ['Todos', 'Hombre', 'Damas', 'Deportivo', 'Medias'];
-  
-  const filteredProducts = categoryFilter && categoryFilter !== 'todos'
-    ? products.filter(p => p.category.toLowerCase() === categoryFilter.toLowerCase())
-    : products;
+  const filteredProducts: Product[] =
+    categoryFilter && categoryFilter !== 'todos'
+      ? products.filter((p) => p.category.toLowerCase() === categoryFilter.toLowerCase())
+      : products;
 
   const handleCategoryClick = (category: string) => {
     if (category === 'Todos') {
@@ -20,6 +26,26 @@ export function Shop() {
       setSearchParams({ category: category.toLowerCase() });
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px]">
+        <p className="text-[16px] text-lupo-text">Cargando catálogo…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px]">
+        <p className="text-[16px] text-red-600 mb-2">No se pudo cargar el catálogo.</p>
+        <p className="text-[14px] text-lupo-text">{error}</p>
+        <p className="text-[13px] text-lupo-text mt-4">
+          Asegurate de que el backend esté corriendo (<code className="text-xs bg-gray-100 px-1">npm run dev</code> en la raíz del proyecto).
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px]">
@@ -55,8 +81,10 @@ export function Shop() {
       
       {filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10">
-          {filteredProducts.map(product => (
-            <ProductCard key={product.id} product={product} />
+          {filteredProducts.map((product) => (
+            <div key={product.id}>
+              <ProductCard product={product} />
+            </div>
           ))}
         </div>
       ) : (

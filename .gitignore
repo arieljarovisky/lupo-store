@@ -1,6 +1,7 @@
 node_modules/
 build/
 dist/
+backend/data/products.json
 coverage/
 .DS_Store
 *.log

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useCart } from '../context/CartContext';
 import { Link } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
@@ -7,7 +7,7 @@ export function Checkout() {
   const { items, cartTotal, clearCart } = useCart();
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     // Simulate payment processing
     setTimeout(() => {

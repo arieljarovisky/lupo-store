@@ -115,7 +115,8 @@ function normalizeToken(value?: string): string {
 
 function isLikelySize(value?: string): boolean {
   const v = normalizeToken(value);
-  return /^(xxs|xs|s|m|l|xl|xxl|xxxl|\d{2,3})$/.test(v);
+  if (!v) return false;
+  return /^(xxs|xs|s|m|l|xl|xxl|xxxl|xxg|xg|g|eg|gg|xgg|u|uni|unico|unica)$/.test(v) || /^\d{2,3}$/.test(v);
 }
 
 function isLikelySku(value?: string): boolean {
@@ -126,20 +127,42 @@ function isLikelySku(value?: string): boolean {
   return /^[A-Za-z0-9._-]{5,}$/.test(raw);
 }
 
+/** Parte el texto de variante (TN suele usar "GG · Negro" o "M / Blanco"). */
+function splitVariantLabelParts(raw: string): string[] {
+  return raw
+    .split(/\s*[|/,\-·•]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 function extractColorFromVariantName(variant: ProductVariant): string | undefined {
   const raw = variant.name?.trim();
   if (!raw) return undefined;
 
-  const tokens = raw
-    .split(/[|/,-]/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+  const tokens = splitVariantLabelParts(raw);
 
   const candidates = tokens.filter((token) => !isLikelySize(token) && !isLikelySku(token));
   if (candidates.length > 0) return candidates[candidates.length - 1];
 
   if (!isLikelySku(raw) && !isLikelySize(raw)) return raw;
   return undefined;
+}
+
+function extractSizeFromVariantName(variant: ProductVariant): string | undefined {
+  const raw = variant.name?.trim();
+  if (!raw) return undefined;
+  const tokens = splitVariantLabelParts(raw);
+  return tokens.find((t) => isLikelySize(t));
+}
+
+/** Si el color viene como "GG · Negro", deja solo la parte de color para UI y claves. */
+function colorNameWithoutSizeTokens(full: string): string {
+  const t = full.trim();
+  if (!t) return t;
+  const parts = splitVariantLabelParts(t);
+  if (parts.length <= 1) return t;
+  const nonSizes = parts.filter((p) => !isLikelySize(p));
+  return nonSizes.length > 0 ? nonSizes.join(' · ') : t;
 }
 
 function inferColorHex(name?: string): string | undefined {
@@ -170,7 +193,8 @@ function inferColorHex(name?: string): string | undefined {
 function variantSize(variant: ProductVariant): string | undefined {
   if (variant.size?.trim()) return variant.size.trim();
   const byOption = variant.optionValues?.find((ov) =>
-    /(talle|talla|size)/i.test(ov.name) || /^(XXS|XS|S|M|L|XL|XXL|XXXL|\d{2,3})$/i.test(ov.value.trim())
+    /(talle|talla|size)/i.test(ov.name) ||
+    /^(XXS|XS|S|M|L|XL|XXL|XXXL|XXG|XG|G|EG|GG|XGG|\d{2,3})$/i.test(ov.value.trim())
   );
   return byOption?.value?.trim() || undefined;
 }
@@ -190,9 +214,10 @@ function variantColor(variant: ProductVariant): { key: string; name: string; hex
     inferColorHex(explicitName);
 
   if (!explicitName && !explicitHex) return null;
-  const label = explicitName || explicitHex || 'Color';
+  const colorOnly = explicitName ? colorNameWithoutSizeTokens(explicitName) : '';
+  const label = colorOnly || explicitHex || 'Color';
   return {
-    key: normalizeToken(explicitName || explicitHex || ''),
+    key: normalizeToken(colorOnly || explicitHex || ''),
     name: label,
     hex: explicitHex,
   };
@@ -214,7 +239,7 @@ export function ProductDetail() {
     if (!product?.variants?.length) return [];
     return product.variants.map((variant) => ({
       variant,
-      size: variantSize(variant) ?? null,
+      size: variantSize(variant) ?? extractSizeFromVariantName(variant) ?? null,
       color: variantColor(variant),
     }));
   }, [product?.variants]);
@@ -449,67 +474,83 @@ export function ProductDetail() {
           </h1>
           <p className="text-[31px] font-medium text-lupo-black mb-7">${displayPrice.toFixed(2)}</p>
 
-          {selectedColorLabel && (
-            <p className="text-[14px] text-[#666] mb-2">
-              Color seleccionado: <span className="text-lupo-black font-medium">{selectedColorLabel}</span>
-            </p>
-          )}
-          {selectedSizeLabel && (
-            <p className="text-[14px] text-[#666] mb-5">
-              Talle seleccionado: <span className="text-lupo-black font-medium">{selectedSizeLabel}</span>
-            </p>
-          )}
-
           {product.variants && product.variants.length > 0 && (
-            <div className="mb-8 border-y border-[#e8e8e8] py-5 space-y-4">
+            <div className="mb-8 border-y border-[#e8e8e8] py-5 space-y-0">
               {colorOptions.length > 0 && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-[12px] uppercase tracking-[1.2px] font-medium min-w-[58px]">Color</p>
-                  <div className="flex flex-wrap gap-2">
-                    {colorOptions.map((color) => {
-                      const active = selectedColorKey === color.key;
-                      const available = availableColors.has(color.key);
-                      const swatchStyle = color.hex ? { backgroundColor: color.hex } : { backgroundColor: '#dddddd' };
-                      return (
-                        <button
-                          key={color.key}
-                          onClick={() => handleSelectColor(color.key)}
-                          className={`w-[36px] h-[36px] border rounded-full p-[3px] transition-all ${
-                            active ? 'border-lupo-black' : 'border-[#d4d4d4]'
-                          } ${!available ? 'opacity-45' : 'hover:border-lupo-black'}`}
-                          title={color.name}
-                        >
-                          <span className="block w-full h-full rounded-full border border-black/15" style={swatchStyle} />
-                        </button>
-                      );
-                    })}
+                <div className="pb-5 border-b border-[#ececec]">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <p className="text-[12px] uppercase tracking-[1.2px] font-medium min-w-[58px] pt-1.5">Color</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap gap-2">
+                        {colorOptions.map((color) => {
+                          const active = selectedColorKey === color.key;
+                          const available = availableColors.has(color.key);
+                          const swatchStyle = color.hex
+                            ? { backgroundColor: color.hex }
+                            : { backgroundColor: '#dddddd' };
+                          return (
+                            <button
+                              key={color.key}
+                              onClick={() => handleSelectColor(color.key)}
+                              className={`w-[36px] h-[36px] border rounded-full p-[3px] transition-all ${
+                                active ? 'border-lupo-black' : 'border-[#d4d4d4]'
+                              } ${!available ? 'opacity-45' : 'hover:border-lupo-black'}`}
+                              title={color.name}
+                              type="button"
+                            >
+                              <span
+                                className="block w-full h-full rounded-full border border-black/15"
+                                style={swatchStyle}
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedColorLabel && (
+                        <p className="text-[13px] text-[#666] mt-3">
+                          Color seleccionado:{' '}
+                          <span className="text-lupo-black font-medium">{selectedColorLabel}</span>
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
 
               {sizeOptions.length > 0 && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-[12px] uppercase tracking-[1.2px] font-medium min-w-[58px]">Talle</p>
-                  <div className="flex flex-wrap gap-2">
-                    {sizeOptions.map((size) => {
-                      const active = selectedSize === size;
-                      const available = availableSizes.has(size);
-                      return (
-                        <button
-                          key={size}
-                          onClick={() => handleSelectSize(size)}
-                          className={`h-[36px] min-w-[42px] px-3 border text-[12px] uppercase tracking-[0.5px] transition-all ${
-                            active
-                              ? 'border-lupo-black bg-[#f2f2f2] text-lupo-black'
-                              : available
-                                ? 'border-[#d4d4d4] text-lupo-black hover:border-lupo-black'
-                                : 'border-[#e3e3e3] text-[#9f9f9f] line-through'
-                          }`}
-                        >
-                          {size}
-                        </button>
-                      );
-                    })}
+                <div className="pt-5">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <p className="text-[12px] uppercase tracking-[1.2px] font-medium min-w-[58px] pt-1.5">Talle</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap gap-2">
+                        {sizeOptions.map((size) => {
+                          const active = selectedSize === size;
+                          const available = availableSizes.has(size);
+                          return (
+                            <button
+                              key={size}
+                              type="button"
+                              onClick={() => handleSelectSize(size)}
+                              className={`h-[36px] min-w-[42px] px-3 border text-[12px] uppercase tracking-[0.5px] transition-all ${
+                                active
+                                  ? 'border-lupo-black bg-[#f2f2f2] text-lupo-black'
+                                  : available
+                                    ? 'border-[#d4d4d4] text-lupo-black hover:border-lupo-black'
+                                    : 'border-[#e3e3e3] text-[#9f9f9f] line-through'
+                              }`}
+                            >
+                              {size}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedSizeLabel && (
+                        <p className="text-[13px] text-[#666] mt-3">
+                          Talle seleccionado:{' '}
+                          <span className="text-lupo-black font-medium">{selectedSizeLabel}</span>
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

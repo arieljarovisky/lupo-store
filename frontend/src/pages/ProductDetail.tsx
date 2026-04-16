@@ -90,6 +90,7 @@ function normalizeColorHex(value?: string): string | undefined {
 }
 
 type ProductVariant = NonNullable<Product['variants']>[number];
+type VariantColor = NonNullable<ReturnType<typeof variantColor>>;
 
 function variantSize(variant: ProductVariant): string | undefined {
   if (variant.size?.trim()) return variant.size.trim();
@@ -157,6 +158,34 @@ export function ProductDetail() {
     return out;
   }, [variantRows]);
 
+  const hasStructuredOptions = sizeOptions.length > 0 || colorOptions.length > 0;
+
+  const colorsBySize = useMemo(() => {
+    const map = new Map<string, VariantColor[]>();
+    for (const row of variantRows) {
+      if (!row.size || !row.color) continue;
+      if (!map.has(row.size)) map.set(row.size, []);
+      const list = map.get(row.size)!;
+      if (!list.some((item) => item.key === row.color!.key)) {
+        list.push(row.color);
+      }
+    }
+    return map;
+  }, [variantRows]);
+
+  const sizesByColor = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const row of variantRows) {
+      if (!row.size || !row.color) continue;
+      if (!map.has(row.color.key)) map.set(row.color.key, []);
+      const list = map.get(row.color.key)!;
+      if (!list.includes(row.size)) {
+        list.push(row.size);
+      }
+    }
+    return map;
+  }, [variantRows]);
+
   useEffect(() => {
     if (!product?.variants?.length) {
       setSelectedVariantId(null);
@@ -172,31 +201,34 @@ export function ProductDetail() {
 
   const selectedVariant = useMemo(() => {
     if (!variantRows.length) return null;
+    if (hasStructuredOptions) {
+      const exact = variantRows.find((row) => {
+        const okSize = selectedSize ? row.size === selectedSize : true;
+        const okColor = selectedColorKey ? row.color?.key === selectedColorKey : true;
+        return okSize && okColor;
+      });
+      if (exact) return exact.variant;
 
-    const byCombo = variantRows.find((row) => {
-      const okSize = selectedSize ? row.size === selectedSize : true;
-      const okColor = selectedColorKey ? row.color?.key === selectedColorKey : true;
-      return okSize && okColor;
-    });
-    if (byCombo) return byCombo.variant;
-
+      if (selectedSize) {
+        const bySize = variantRows.find((row) => row.size === selectedSize);
+        if (bySize) return bySize.variant;
+      }
+      if (selectedColorKey) {
+        const byColor = variantRows.find((row) => row.color?.key === selectedColorKey);
+        if (byColor) return byColor.variant;
+      }
+      return variantRows[0].variant;
+    }
     const byId = selectedVariantId
       ? variantRows.find((row) => row.variant.id === selectedVariantId)?.variant
       : null;
     return byId ?? variantRows[0].variant;
-  }, [variantRows, selectedColorKey, selectedSize, selectedVariantId]);
-
-  useEffect(() => {
-    if (!selectedVariant) return;
-    setSelectedVariantId(selectedVariant.id);
-    const row = variantRows.find((x) => x.variant.id === selectedVariant.id);
-    if (row?.size) setSelectedSize(row.size);
-    if (row?.color) setSelectedColorKey(row.color.key);
-  }, [selectedVariant, variantRows]);
+  }, [hasStructuredOptions, selectedColorKey, selectedSize, selectedVariantId, variantRows]);
 
   const displayPrice = selectedVariant?.price ?? product?.price ?? 0;
   const displayStock = selectedVariant?.stockQuantity ?? product?.stockQuantity;
   const displaySku = selectedVariant?.sku ?? product?.sku;
+  const isOutOfStock = typeof displayStock === 'number' && displayStock <= 0;
   const selectedSizeLabel = selectedVariant ? variantSize(selectedVariant) : null;
   const selectedColorLabel = selectedVariant ? variantColor(selectedVariant)?.name ?? null : null;
   const richDescription = useMemo(() => {
@@ -226,6 +258,46 @@ export function ProductDetail() {
   const related = products
     .filter((p) => p.id !== productId && p.category === product?.category)
     .slice(0, 4);
+
+  const availableSizes = useMemo(() => {
+    if (!selectedColorKey) return new Set(sizeOptions);
+    return new Set(
+      sizeOptions.filter((size) =>
+        variantRows.some((row) => row.size === size && row.color?.key === selectedColorKey)
+      )
+    );
+  }, [selectedColorKey, sizeOptions, variantRows]);
+
+  const availableColors = useMemo(() => {
+    if (!selectedSize) return new Set(colorOptions.map((color) => color.key));
+    return new Set(
+      colorOptions
+        .filter((color) =>
+          variantRows.some((row) => row.size === selectedSize && row.color?.key === color.key)
+        )
+        .map((color) => color.key)
+    );
+  }, [selectedSize, colorOptions, variantRows]);
+
+  const handleSelectSize = (size: string) => {
+    setSelectedVariantId(null);
+    setSelectedSize(size);
+    if (!selectedColorKey) return;
+    const compatibleColors = colorsBySize.get(size) ?? [];
+    if (!compatibleColors.some((item) => item.key === selectedColorKey)) {
+      setSelectedColorKey(compatibleColors[0]?.key ?? null);
+    }
+  };
+
+  const handleSelectColor = (colorKey: string) => {
+    setSelectedVariantId(null);
+    setSelectedColorKey(colorKey);
+    if (!selectedSize) return;
+    const compatibleSizes = sizesByColor.get(colorKey) ?? [];
+    if (!compatibleSizes.includes(selectedSize)) {
+      setSelectedSize(compatibleSizes[0] ?? null);
+    }
+  };
 
   if (loading) {
     return (
@@ -262,7 +334,7 @@ export function ProductDetail() {
   }
 
   return (
-    <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px]">
+    <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] bg-[#fafafa]">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(380px,520px)_1fr] gap-10 lg:gap-16 items-start">
         <div className="grid grid-cols-[76px_1fr] gap-3 md:gap-4 w-full">
           <div className="space-y-2">
@@ -290,7 +362,7 @@ export function ProductDetail() {
           </div>
         </div>
 
-        <div className="flex flex-col max-w-[760px]">
+        <div className="flex flex-col max-w-[760px] bg-white border border-[#eee] p-6 md:p-10 rounded-sm shadow-[0_8px_24px_rgba(0,0,0,0.03)]">
           <p className="text-[11px] text-[#777] uppercase tracking-[1.5px] mb-4">{product.category}</p>
           <h1 className="text-[36px] md:text-[46px] font-light tracking-[-1px] leading-[1.1] mb-5">
             {product.name}
@@ -308,62 +380,78 @@ export function ProductDetail() {
           )}
 
           {product.variants && product.variants.length > 0 && (
-            <div className="mb-8 p-4 border border-lupo-border bg-white">
-              <p className="text-[12px] uppercase tracking-[1.5px] font-medium mb-4 text-lupo-black">
-                Elegí una variante
-              </p>
+            <div className="mb-8 p-5 md:p-6 border border-lupo-border bg-[#fcfcfc] rounded-sm">
+              <div className="flex items-center justify-between mb-5">
+                <p className="text-[12px] uppercase tracking-[1.5px] font-medium text-lupo-black">
+                  Elegí tu variante
+                </p>
+                {selectedVariant && (
+                  <p className="text-[11px] text-[#777] uppercase tracking-[1.2px]">{selectedVariant.name}</p>
+                )}
+              </div>
 
-              {sizeOptions.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-[11px] uppercase tracking-[1.2px] text-[#666] mb-2">Talle</p>
-                  <div className="flex flex-wrap gap-2">
-                    {sizeOptions.map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => setSelectedSize(size)}
-                        className={`px-4 py-2 text-[12px] border rounded-sm transition-colors ${
-                          selectedSize === size
-                            ? 'bg-lupo-black text-white border-lupo-black'
-                            : 'bg-white text-lupo-black border-lupo-border hover:border-lupo-black'
-                        }`}
-                      >
-                        {size}
-                      </button>
-                    ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {sizeOptions.length > 0 && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[1.2px] text-[#666] mb-2">Talle</p>
+                    <div className="flex flex-wrap gap-2">
+                      {sizeOptions.map((size) => {
+                        const active = selectedSize === size;
+                        const available = availableSizes.has(size);
+                        return (
+                          <button
+                            key={size}
+                            onClick={() => handleSelectSize(size)}
+                            className={`min-w-[48px] px-4 py-2 text-[12px] border rounded-sm transition-all ${
+                              active
+                                ? 'bg-lupo-black text-white border-lupo-black'
+                                : available
+                                  ? 'bg-white text-lupo-black border-lupo-border hover:border-lupo-black'
+                                  : 'bg-[#f3f3f3] text-[#999] border-[#e4e4e4]'
+                            }`}
+                          >
+                            {size}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {colorOptions.length > 0 && (
-                <div className="mb-3">
-                  <p className="text-[11px] uppercase tracking-[1.2px] text-[#666] mb-2">Color</p>
-                  <div className="flex flex-wrap gap-2">
-                    {colorOptions.map((color) => {
-                      const active = selectedColorKey === color.key;
-                      return (
-                        <button
-                          key={color.key}
-                          onClick={() => setSelectedColorKey(color.key)}
-                          className={`px-3 py-2 text-[12px] border rounded-sm flex items-center gap-2 transition-colors ${
-                            active
-                              ? 'bg-lupo-black text-white border-lupo-black'
-                              : 'bg-white text-lupo-black border-lupo-border hover:border-lupo-black'
-                          }`}
-                        >
-                          <span
-                            className="inline-block w-3 h-3 rounded-full border border-black/20"
-                            style={color.hex ? { backgroundColor: color.hex } : { backgroundColor: '#e5e5e5' }}
-                          />
-                          <span>{color.name}</span>
-                        </button>
-                      );
-                    })}
+                {colorOptions.length > 0 && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[1.2px] text-[#666] mb-2">Color</p>
+                    <div className="flex flex-wrap gap-2">
+                      {colorOptions.map((color) => {
+                        const active = selectedColorKey === color.key;
+                        const available = availableColors.has(color.key);
+                        return (
+                          <button
+                            key={color.key}
+                            onClick={() => handleSelectColor(color.key)}
+                            className={`px-3 py-2 text-[12px] border rounded-sm flex items-center gap-2 transition-all ${
+                              active
+                                ? 'bg-lupo-black text-white border-lupo-black'
+                                : available
+                                  ? 'bg-white text-lupo-black border-lupo-border hover:border-lupo-black'
+                                  : 'bg-[#f3f3f3] text-[#999] border-[#e4e4e4]'
+                            }`}
+                          >
+                            <span
+                              className="inline-block w-3 h-3 rounded-full border border-black/20"
+                              style={color.hex ? { backgroundColor: color.hex } : { backgroundColor: '#e5e5e5' }}
+                            />
+                            <span>{color.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              {sizeOptions.length === 0 && colorOptions.length === 0 && (
-                <div className="mb-3">
+              {!hasStructuredOptions && (
+                <div className="mt-1">
                   <p className="text-[11px] uppercase tracking-[1.2px] text-[#666] mb-2">Variantes</p>
                   <div className="flex flex-wrap gap-2">
                     {product.variants.map((variant) => (
@@ -381,12 +469,6 @@ export function ProductDetail() {
                     ))}
                   </div>
                 </div>
-              )}
-
-              {selectedVariant && (
-                <p className="text-[12px] text-[#777] mt-3">
-                  Seleccionada: {selectedVariant.name}
-                </p>
               )}
             </div>
           )}
@@ -426,15 +508,21 @@ export function ProductDetail() {
                 const suffix = [selectedSizeLabel, selectedColorLabel].filter(Boolean).join(' / ');
                 addToCart({
                   ...product,
+                  id: selectedVariant?.id ?? product.id,
                   name: suffix ? `${product.name} - ${suffix}` : product.name,
                   price: displayPrice,
                   sku: displaySku,
                   image: selectedVariant?.image || selectedImage || product.image,
                 });
               }}
-              className="bg-lupo-black text-white px-[32px] py-[14px] uppercase text-[11px] tracking-[2px] font-semibold hover:bg-black/80 transition-colors"
+              disabled={isOutOfStock}
+              className={`px-[32px] py-[14px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors ${
+                isOutOfStock
+                  ? 'bg-[#c8c8c8] text-white cursor-not-allowed'
+                  : 'bg-lupo-black text-white hover:bg-black/80'
+              }`}
             >
-              Agregar al carrito
+              {isOutOfStock ? 'Sin stock' : 'Agregar al carrito'}
             </button>
             <Link
               to={`/shop?category=${encodeURIComponent(product.category.toLowerCase())}`}
@@ -451,7 +539,9 @@ export function ProductDetail() {
           <h2 className="text-[28px] font-light tracking-[-0.8px] mb-8">También te puede interesar</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {related.map((item) => (
-              <ProductCard key={item.id} product={item} />
+              <div key={item.id}>
+                <ProductCard product={item} />
+              </div>
             ))}
           </div>
         </section>

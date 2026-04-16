@@ -92,6 +92,68 @@ function normalizeColorHex(value?: string): string | undefined {
 type ProductVariant = NonNullable<Product['variants']>[number];
 type VariantColor = NonNullable<ReturnType<typeof variantColor>>;
 
+function normalizeToken(value?: string): string {
+  return String(value ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function isLikelySize(value?: string): boolean {
+  const v = normalizeToken(value);
+  return /^(xxs|xs|s|m|l|xl|xxl|xxxl|\d{2,3})$/.test(v);
+}
+
+function isLikelySku(value?: string): boolean {
+  const raw = String(value ?? '').trim();
+  if (!raw) return false;
+  if (/\s/.test(raw)) return false;
+  if (/^\d+$/.test(raw)) return true;
+  return /^[A-Za-z0-9._-]{5,}$/.test(raw);
+}
+
+function extractColorFromVariantName(variant: ProductVariant): string | undefined {
+  const raw = variant.name?.trim();
+  if (!raw) return undefined;
+
+  const tokens = raw
+    .split(/[|/,-]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const candidates = tokens.filter((token) => !isLikelySize(token) && !isLikelySku(token));
+  if (candidates.length > 0) return candidates[candidates.length - 1];
+
+  if (!isLikelySku(raw) && !isLikelySize(raw)) return raw;
+  return undefined;
+}
+
+function inferColorHex(name?: string): string | undefined {
+  const n = normalizeToken(name);
+  if (!n) return undefined;
+  const map: Record<string, string> = {
+    negro: '#111111',
+    black: '#111111',
+    blanco: '#f5f5f5',
+    white: '#f5f5f5',
+    azul: '#355c8c',
+    blue: '#355c8c',
+    rojo: '#a42d2d',
+    red: '#a42d2d',
+    verde: '#4c7a52',
+    green: '#4c7a52',
+    gris: '#8b8b8b',
+    gray: '#8b8b8b',
+    grey: '#8b8b8b',
+    beige: '#d9c4a3',
+    marron: '#8a5a34',
+    brown: '#8a5a34',
+  };
+  const hit = Object.entries(map).find(([key]) => n.includes(key));
+  return hit?.[1];
+}
+
 function variantSize(variant: ProductVariant): string | undefined {
   if (variant.size?.trim()) return variant.size.trim();
   const byOption = variant.optionValues?.find((ov) =>
@@ -103,18 +165,21 @@ function variantSize(variant: ProductVariant): string | undefined {
 function variantColor(variant: ProductVariant): { key: string; name: string; hex?: string } | null {
   const nameByOption = variant.optionValues?.find((ov) =>
     /color/i.test(ov.name) ||
-    /(negro|blanco|azul|rojo|verde|gris|beige|brown|black|white|blue|red|green|gray|grey|pink)/i.test(
+    /(negro|blanco|azul|rojo|verde|gris|beige|marr[oó]n|brown|black|white|blue|red|green|gray|grey|pink)/i.test(
       ov.value
     )
   );
-  const explicitName = variant.colorName?.trim() || nameByOption?.value?.trim();
+  const inferredFromName = extractColorFromVariantName(variant);
+  const explicitName = variant.colorName?.trim() || nameByOption?.value?.trim() || inferredFromName;
   const explicitHex =
-    normalizeColorHex(variant.colorHex) || normalizeColorHex(nameByOption?.swatch);
+    normalizeColorHex(variant.colorHex) ||
+    normalizeColorHex(nameByOption?.swatch) ||
+    inferColorHex(explicitName);
 
   if (!explicitName && !explicitHex) return null;
   const label = explicitName || explicitHex || 'Color';
   return {
-    key: (explicitName || explicitHex || '').toLowerCase(),
+    key: normalizeToken(explicitName || explicitHex || ''),
     name: label,
     hex: explicitHex,
   };

@@ -9,6 +9,7 @@ import { Home } from './pages/Home';
 import { Shop } from './pages/Shop';
 import { Checkout } from './pages/Checkout';
 import { Admin } from './pages/Admin';
+import { ProductDetail } from './pages/ProductDetail';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/shop" element={<Shop />} />
+              <Route path="/producto/:id" element={<ProductDetail />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/admin" element={<Admin />} />
               {/* Fallback for other routes */}

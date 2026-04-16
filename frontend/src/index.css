@@ -16,3 +16,27 @@
     @apply font-display tracking-[-1px] font-light;
   }
 }
+
+@layer components {
+  .product-description p {
+    @apply mb-4;
+  }
+
+  .product-description ul,
+  .product-description ol {
+    @apply pl-5 mb-4;
+  }
+
+  .product-description table {
+    @apply w-full border border-lupo-border border-collapse my-5 text-[13px];
+  }
+
+  .product-description th,
+  .product-description td {
+    @apply border border-lupo-border px-3 py-2 text-left align-top;
+  }
+
+  .product-description th {
+    @apply bg-[#F7F7F7] font-semibold text-lupo-black;
+  }
+}

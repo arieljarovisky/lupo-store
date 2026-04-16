@@ -22,19 +22,40 @@ function categoryLabel(cat: Record<string, unknown> | undefined): string {
   return name || 'General';
 }
 
-function normalizeDescription(input: unknown): string | undefined {
+function normalizeDescriptionHtml(input: unknown): string | undefined {
   const html = pickLocalized(input);
   if (!html) return undefined;
-  const withBreaks = html
-    .replace(/<(br|BR)\s*\/?>/g, '\n')
-    .replace(/<\/(p|div|li|h1|h2|h3|h4|h5|h6)>/gi, '\n');
-  const clean = withBreaks
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim();
-  return clean || undefined;
+  // Conservamos HTML (ej. tabla de talles) y removemos tags peligrosos básicos.
+  const cleaned = html
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/\sjavascript:/gi, ' ');
+  return cleaned.trim() || undefined;
+}
+
+function valuesFromVariant(raw: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const vals = raw.values;
+  if (Array.isArray(vals)) {
+    for (const v of vals) {
+      const txt =
+        pickLocalized(v) ||
+        (v && typeof v === 'object' ? pickLocalized((v as Record<string, unknown>).value) : '');
+      if (txt) out.push(txt.trim());
+    }
+  } else if (vals && typeof vals === 'object') {
+    for (const v of Object.values(vals as Record<string, unknown>)) {
+      const txt = pickLocalized(v);
+      if (txt) out.push(txt.trim());
+    }
+  }
+  for (const key of ['option1', 'option2', 'option3'] as const) {
+    const txt = pickLocalized(raw[key]);
+    if (txt) out.push(txt.trim());
+  }
+  return [...new Set(out.filter(Boolean))];
 }
 
 function variantLabel(raw: Record<string, unknown>): string {
@@ -44,12 +65,7 @@ function variantLabel(raw: Record<string, unknown>): string {
     pickLocalized(raw.label) ||
     String(raw.sku ?? '').trim();
   if (direct) return direct;
-
-  const values = Array.isArray(raw.values) ? (raw.values as unknown[]) : [];
-  const parts = values
-    .map((v) => pickLocalized(v))
-    .map((v) => v.trim())
-    .filter(Boolean);
+  const parts = valuesFromVariant(raw);
   if (parts.length > 0) return parts.join(' / ');
   return 'Variante';
 }
@@ -114,7 +130,8 @@ export function mapTiendaNubeProduct(raw: Record<string, unknown>): Product | nu
     : [];
   const category = categoryLabel(categories[0]);
 
-  const description = normalizeDescription(raw.description) ?? normalizeDescription(raw.seo_description);
+  const description =
+    normalizeDescriptionHtml(raw.description) ?? normalizeDescriptionHtml(raw.seo_description);
 
   return {
     id,

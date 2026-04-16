@@ -12,6 +12,7 @@ import { authRouter } from './routes/authRoutes.js';
 import { orderRouter } from './routes/orderRoutes.js';
 import { adminRouter } from './routes/adminRoutes.js';
 import { hubRouter } from './routes/hubRoutes.js';
+import { tiendanubePrivacyRouter } from './routes/tiendanubePrivacyRoutes.js';
 import { requireAdmin } from './middleware/auth.js';
 import {
   buildTiendaNubeAuthorizeUrl,
@@ -194,6 +195,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/orders', orderRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/hub', hubRouter);
+app.use('/api/tiendanube/privacy', tiendanubePrivacyRouter);
 
 const publicDir = path.join(process.cwd(), 'frontend/dist');
 if (process.env.NODE_ENV === 'production' && fs.existsSync(publicDir)) {

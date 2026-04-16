@@ -380,20 +380,11 @@ export function ProductDetail() {
           )}
 
           {product.variants && product.variants.length > 0 && (
-            <div className="mb-8 p-5 md:p-6 border border-lupo-border bg-[#fcfcfc] rounded-sm">
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-[12px] uppercase tracking-[1.5px] font-medium text-lupo-black">
-                  Elegí tu variante
-                </p>
-                {selectedVariant && (
-                  <p className="text-[11px] text-[#777] uppercase tracking-[1.2px]">{selectedVariant.name}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="mb-8 py-4 border-y border-lupo-border">
+              <div className="space-y-4">
                 {sizeOptions.length > 0 && (
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[1.2px] text-[#666] mb-2">Talle</p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-[12px] uppercase tracking-[2px] text-lupo-black min-w-[52px]">Talle</p>
                     <div className="flex flex-wrap gap-2">
                       {sizeOptions.map((size) => {
                         const active = selectedSize === size;
@@ -402,12 +393,12 @@ export function ProductDetail() {
                           <button
                             key={size}
                             onClick={() => handleSelectSize(size)}
-                            className={`min-w-[48px] px-4 py-2 text-[12px] border rounded-sm transition-all ${
+                            className={`h-[38px] px-4 text-[13px] border uppercase tracking-[0.5px] transition-all ${
                               active
-                                ? 'bg-lupo-black text-white border-lupo-black'
+                                ? 'bg-[#efefef] text-lupo-black border-lupo-black'
                                 : available
-                                  ? 'bg-white text-lupo-black border-lupo-border hover:border-lupo-black'
-                                  : 'bg-[#f3f3f3] text-[#999] border-[#e4e4e4]'
+                                  ? 'bg-white text-lupo-black border-[#2a2a2a] hover:bg-[#f7f7f7]'
+                                  : 'bg-white text-[#9f9f9f] border-[#cfcfcf] line-through'
                             }`}
                           >
                             {size}
@@ -419,29 +410,36 @@ export function ProductDetail() {
                 )}
 
                 {colorOptions.length > 0 && (
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[1.2px] text-[#666] mb-2">Color</p>
-                    <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-[12px] uppercase tracking-[2px] text-lupo-black min-w-[52px]">Color</p>
+                    <div className="flex flex-wrap items-center gap-2">
                       {colorOptions.map((color) => {
                         const active = selectedColorKey === color.key;
                         const available = availableColors.has(color.key);
+                        const isSwatch = Boolean(color.hex);
                         return (
                           <button
                             key={color.key}
                             onClick={() => handleSelectColor(color.key)}
-                            className={`px-3 py-2 text-[12px] border rounded-sm flex items-center gap-2 transition-all ${
+                            className={`h-[38px] border transition-all ${
+                              isSwatch ? 'w-[38px] p-[3px]' : 'px-4 text-[13px] uppercase tracking-[0.3px]'
+                            } ${
                               active
-                                ? 'bg-lupo-black text-white border-lupo-black'
+                                ? 'border-lupo-black'
                                 : available
-                                  ? 'bg-white text-lupo-black border-lupo-border hover:border-lupo-black'
-                                  : 'bg-[#f3f3f3] text-[#999] border-[#e4e4e4]'
+                                  ? 'border-[#2a2a2a] hover:bg-[#f7f7f7]'
+                                  : 'border-[#cfcfcf] text-[#9f9f9f] line-through'
                             }`}
                           >
-                            <span
-                              className="inline-block w-3 h-3 rounded-full border border-black/20"
-                              style={color.hex ? { backgroundColor: color.hex } : { backgroundColor: '#e5e5e5' }}
-                            />
-                            <span>{color.name}</span>
+                            {isSwatch ? (
+                              <span
+                                className={`block h-full w-full ${!available ? 'opacity-40' : ''}`}
+                                style={{ backgroundColor: color.hex }}
+                                title={color.name}
+                              />
+                            ) : (
+                              color.name
+                            )}
                           </button>
                         );
                       })}

@@ -52,6 +52,7 @@ function publicProduct(p: Product) {
     image: p.image,
     category: p.category,
     description: p.description,
+    variants: p.variants,
   };
 }
 

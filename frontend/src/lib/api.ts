@@ -24,6 +24,22 @@ export function apiBase(): string {
   return b ? normalizeApiBase(b) : '';
 }
 
+/** URL de comprobación del backend (misma base que el catálogo). */
+export function apiHealthUrl(): string {
+  const base = apiBase();
+  if (base) return `${base}/api/health`;
+  if (typeof window !== 'undefined') return `${window.location.origin}/api/health`;
+  return '/api/health';
+}
+
+function networkFetchErrorMessage(url: string, err: TypeError): string {
+  return (
+    `No se pudo conectar (${err.message}). URL: ${url}. ` +
+    `Abrí en el navegador ${apiHealthUrl()}: si no ves JSON con "ok", el backend no responde o la base del API es incorrecta. ` +
+    `Si el front está en otro dominio, verificá VITE_API_URL (https://…), redeploy tras cambiarla, y revisá CORS o contenido mixto (HTTPS vs HTTP).`
+  );
+}
+
 function apiErrorMessage(res: Response, bodyText: string): string {
   const ct = res.headers.get('content-type') || '';
   if (res.status === 404 || (!ct.includes('application/json') && bodyText.length > 0)) {
@@ -53,8 +69,17 @@ function apiErrorMessage(res: Response, bodyText: string): string {
 }
 
 export async function fetchProducts(): Promise<Product[]> {
-  const url = `${apiBase()}/api/products`;
-  const res = await fetch(url);
+  const base = apiBase();
+  const url = base ? `${base}/api/products` : '/api/products';
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    if (e instanceof TypeError) {
+      throw new Error(networkFetchErrorMessage(url, e));
+    }
+    throw e;
+  }
   const text = await res.text();
   const ct = res.headers.get('content-type') || '';
 
@@ -81,10 +106,20 @@ export async function importFromTiendaNube(): Promise<{
   const key = import.meta.env.VITE_IMPORT_API_KEY?.trim();
   if (key) headers['x-import-key'] = key;
 
-  const res = await fetch(`${apiBase()}/api/admin/import/tiendanube`, {
-    method: 'POST',
-    headers,
-  });
+  const base = apiBase();
+  const importUrl = base ? `${base}/api/admin/import/tiendanube` : '/api/admin/import/tiendanube';
+  let res: Response;
+  try {
+    res = await fetch(importUrl, {
+      method: 'POST',
+      headers,
+    });
+  } catch (e) {
+    if (e instanceof TypeError) {
+      return { ok: false, imported: 0, error: networkFetchErrorMessage(importUrl, e) };
+    }
+    throw e;
+  }
   const text = await res.text();
   let data: { ok?: boolean; imported?: number; message?: string; error?: string } = {};
   try {

@@ -21,7 +21,13 @@ const TN_USER_AGENT = process.env.TIENDANUBE_USER_AGENT?.trim();
 const TN_API_VERSION = process.env.TIENDANUBE_API_VERSION?.trim() || '2025-03';
 
 const app = express();
-app.use(cors({ origin: true }));
+app.use(
+  cors({
+    origin: true,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-import-key', 'x-hub-api-key'],
+  })
+);
 app.use(express.json());
 
 function assertImportKey(req: express.Request): boolean {

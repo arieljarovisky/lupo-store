@@ -36,13 +36,27 @@ export function Shop() {
   }
 
   if (error) {
+    const isDevHint =
+      import.meta.env.DEV &&
+      !error.includes('Vercel') &&
+      !error.includes('404/HTML') &&
+      !error.includes('mismo origen');
     return (
-      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px]">
+      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] max-w-2xl">
         <p className="text-[16px] text-red-600 mb-2">No se pudo cargar el catálogo.</p>
-        <p className="text-[14px] text-lupo-text">{error}</p>
-        <p className="text-[13px] text-lupo-text mt-4">
-          Asegurate de que el backend esté corriendo (<code className="text-xs bg-gray-100 px-1">npm run dev</code> en la raíz del proyecto).
-        </p>
+        <p className="text-[14px] text-lupo-text whitespace-pre-wrap">{error}</p>
+        {isDevHint ? (
+          <p className="text-[13px] text-lupo-text mt-4">
+            En local: <code className="text-xs bg-gray-100 px-1">npm run dev</code> en la raíz del proyecto.
+          </p>
+        ) : (
+          <p className="text-[13px] text-lupo-text mt-4 leading-relaxed">
+            En producción: el front tiene que apuntar al backend. Definí{' '}
+            <code className="text-xs bg-gray-100 px-1">VITE_API_URL</code> con la URL del API al hacer build, o
+            desplegá API + sitio en el mismo servicio (Express sirve <code className="text-xs bg-gray-100 px-1">/api</code>{' '}
+            y los archivos estáticos).
+          </p>
+        )}
       </div>
     );
   }

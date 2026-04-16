@@ -1,4 +1,4 @@
-/** Resuelve credenciales desde DATABASE_URL / MYSQL_URL (Railway) o variables sueltas. */
+/** Resuelve credenciales desde URL o variables sueltas (Railway, Docker, local). */
 
 export interface MysqlConnectionConfig {
   host: string;
@@ -9,6 +9,22 @@ export interface MysqlConnectionConfig {
   useSsl: boolean;
 }
 
+function firstUrl(): string | undefined {
+  const keys = [
+    'DATABASE_URL',
+    'MYSQL_URL',
+    'MYSQL_PRIVATE_URL',
+    'MYSQL_PUBLIC_URL',
+    'MYSQLDATABASE_URL',
+    'MYSQL_CONNECTION_STRING',
+  ] as const;
+  for (const k of keys) {
+    const v = process.env[k]?.trim();
+    if (v) return v;
+  }
+  return undefined;
+}
+
 function parseDatabaseUrl(raw: string): Omit<MysqlConnectionConfig, 'useSsl'> {
   let urlString = raw.trim();
   if (!urlString.includes('://')) {
@@ -17,7 +33,7 @@ function parseDatabaseUrl(raw: string): Omit<MysqlConnectionConfig, 'useSsl'> {
   const u = new URL(urlString);
   const database = u.pathname.replace(/^\//, '').split('/')[0]?.split('?')[0];
   if (!database) {
-    throw new Error('La URL de MySQL debe incluir el nombre de la base al final (ej. mysql://.../nombre_base).');
+    throw new Error('La URL de MySQL debe incluir el nombre de la base al final (ej. mysql://usuario:pass@host:puerto/nombre_base).');
   }
   const user = decodeURIComponent(u.username || '');
   const password = decodeURIComponent(u.password || '');
@@ -33,14 +49,21 @@ function parseDatabaseUrl(raw: string): Omit<MysqlConnectionConfig, 'useSsl'> {
   };
 }
 
-export function resolveMysqlConnectionConfig(): MysqlConnectionConfig {
-  const url = process.env.DATABASE_URL?.trim() || process.env.MYSQL_URL?.trim();
+function inferSsl(host: string): boolean {
   const ms = process.env.MYSQL_SSL?.trim();
-  const sslEnv = ms === '1' || ms?.toLowerCase() === 'true';
+  if (ms === '0' || ms?.toLowerCase() === 'false') return false;
+  if (ms === '1' || ms?.toLowerCase() === 'true') return true;
+  const local = host === '127.0.0.1' || host === 'localhost' || host === '::1';
+  if (local) return false;
+  if (process.env.RAILWAY_ENVIRONMENT) return true;
+  return process.env.MYSQL_SSL_REQUIRED === '1';
+}
 
+export function resolveMysqlConnectionConfig(): MysqlConnectionConfig {
+  const url = firstUrl();
   if (url) {
     const base = parseDatabaseUrl(url);
-    return { ...base, useSsl: sslEnv };
+    return { ...base, useSsl: inferSsl(base.host) };
   }
 
   const host =
@@ -51,11 +74,15 @@ export function resolveMysqlConnectionConfig(): MysqlConnectionConfig {
   const user = process.env.MYSQL_USER?.trim() || process.env.MYSQLUSER?.trim();
   const password = process.env.MYSQL_PASSWORD ?? process.env.MYSQLPASSWORD ?? '';
   const database =
-    process.env.MYSQL_DATABASE?.trim() || process.env.MYSQLDATABASE?.trim();
+    process.env.MYSQL_DATABASE?.trim() ||
+    process.env.MYSQLDATABASE?.trim() ||
+    process.env.MYSQL_DATABASE_NAME?.trim();
 
   if (!user || !database) {
     throw new Error(
-      'Configurá DATABASE_URL o MYSQL_URL, o bien MYSQL_USER y MYSQL_DATABASE (y host/puerto si aplica).'
+      'Faltan variables de MySQL. En Railway: creá un plugin MySQL, abrí tu servicio web → Variables → ' +
+        '"Add variable reference" y enlazá la URL del MySQL (suele llamarse MYSQL_URL o DATABASE_URL). ' +
+        'También podés pegar manualmente DATABASE_URL=mysql://... Local: MYSQL_USER + MYSQL_DATABASE o DATABASE_URL.'
     );
   }
 
@@ -65,6 +92,6 @@ export function resolveMysqlConnectionConfig(): MysqlConnectionConfig {
     user,
     password,
     database,
-    useSsl: sslEnv,
+    useSsl: inferSsl(host),
   };
 }

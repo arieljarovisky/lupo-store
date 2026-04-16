@@ -227,10 +227,11 @@ export function ProductDetail() {
 
   const displayPrice = selectedVariant?.price ?? product?.price ?? 0;
   const displayStock = selectedVariant?.stockQuantity ?? product?.stockQuantity;
-  const displaySku = selectedVariant?.sku ?? product?.sku;
   const isOutOfStock = typeof displayStock === 'number' && displayStock <= 0;
-  const selectedSizeLabel = selectedVariant ? variantSize(selectedVariant) : null;
-  const selectedColorLabel = selectedVariant ? variantColor(selectedVariant)?.name ?? null : null;
+  const selectedSizeLabel = selectedSize ?? (selectedVariant ? variantSize(selectedVariant) ?? null : null);
+  const selectedColorLabel =
+    colorOptions.find((color) => color.key === selectedColorKey)?.name ??
+    (selectedVariant ? variantColor(selectedVariant)?.name ?? null : null);
   const richDescription = useMemo(() => {
     const d = product?.description?.trim();
     if (!d) return '';
@@ -334,18 +335,18 @@ export function ProductDetail() {
   }
 
   return (
-    <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] bg-white">
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(380px,520px)_1fr] gap-10 lg:gap-16 items-start">
-        <div className="grid grid-cols-[76px_1fr] gap-3 md:gap-4 w-full">
-          <div className="space-y-2">
-            {galleryImages.slice(0, 8).map((img, idx) => {
+    <div className="min-h-screen pt-[116px] pb-24 px-4 md:px-8 lg:px-12 bg-white">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(680px,1fr)_460px] gap-8 xl:gap-14 items-start max-w-[1680px] mx-auto">
+        <div className="grid grid-cols-[84px_1fr] lg:grid-cols-[96px_1fr] gap-4 w-full">
+          <div className="space-y-3">
+            {galleryImages.slice(0, 10).map((img, idx) => {
               const active = img === selectedImage;
               return (
                 <button
                   key={`${img}-${idx}`}
                   onClick={() => setSelectedImage(img)}
-                  className={`w-full h-[76px] border overflow-hidden bg-white ${
-                    active ? 'border-lupo-black' : 'border-lupo-border'
+                  className={`w-full h-[84px] lg:h-[96px] border overflow-hidden bg-[#f5f5f5] transition-colors ${
+                    active ? 'border-lupo-black' : 'border-[#e3e3e3]'
                   }`}
                 >
                   <img src={img} alt={`${product.name} ${idx + 1}`} className="w-full h-full object-cover" />
@@ -353,122 +354,100 @@ export function ProductDetail() {
               );
             })}
           </div>
-          <div className="bg-white border border-[#EEE] rounded-sm overflow-hidden w-full">
+
+          <div className="bg-[#f5f5f5] border border-[#ececec] overflow-hidden w-full">
             <img
               src={selectedImage || galleryImages[0]}
               alt={product.name}
-              className="w-full h-[520px] md:h-[620px] object-contain p-4 md:p-6"
+              className="w-full h-[620px] md:h-[760px] xl:h-[820px] object-contain p-8 md:p-10"
             />
           </div>
         </div>
 
-        <div className="flex flex-col max-w-[520px]">
-          <p className="text-[12px] text-[#8b8b8b] mb-6">Shop / {product.category}</p>
-          <h1 className="text-[34px] md:text-[40px] font-medium tracking-[-0.6px] leading-[1.1] mb-4">
+        <aside className="xl:sticky xl:top-[132px]">
+          <p className="text-[12px] text-[#8a8a8a] mb-4">Shop / {product.category}</p>
+          <h1 className="text-[34px] leading-[1.08] tracking-[-0.6px] font-medium text-lupo-black mb-4">
             {product.name}
           </h1>
-          <p className="text-[30px] font-medium text-lupo-black mb-8">${displayPrice.toFixed(2)}</p>
-          {richDescription ? (
-            <div
-              className="product-description text-[14px] text-lupo-text leading-[1.8] mb-8 max-w-[420px]"
-              dangerouslySetInnerHTML={{ __html: richDescription }}
-            />
-          ) : (
-            <p className="text-[14px] text-lupo-text leading-[1.8] mb-8 max-w-[420px]">
-              Sin descripción disponible para este producto.
+          <p className="text-[31px] font-medium text-lupo-black mb-7">${displayPrice.toFixed(2)}</p>
+
+          {selectedColorLabel && (
+            <p className="text-[14px] text-[#666] mb-2">
+              Color seleccionado: <span className="text-lupo-black font-medium">{selectedColorLabel}</span>
+            </p>
+          )}
+          {selectedSizeLabel && (
+            <p className="text-[14px] text-[#666] mb-5">
+              Talle seleccionado: <span className="text-lupo-black font-medium">{selectedSizeLabel}</span>
             </p>
           )}
 
           {product.variants && product.variants.length > 0 && (
-            <div className="mb-8">
-              <div className="space-y-4">
-                {sizeOptions.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-[13px] font-medium uppercase tracking-[1.2px] text-lupo-black min-w-[56px]">
-                      Talle
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {sizeOptions.map((size) => {
-                        const active = selectedSize === size;
-                        const available = availableSizes.has(size);
-                        return (
-                          <button
-                            key={size}
-                            onClick={() => handleSelectSize(size)}
-                            className={`h-[38px] min-w-[44px] px-3 text-[13px] border uppercase tracking-[0.5px] transition-all ${
-                              active
-                                ? 'bg-[#f3f3f3] text-lupo-black border-lupo-black'
-                                : available
-                                  ? 'bg-white text-lupo-black border-[#d0d0d0] hover:border-lupo-black'
-                                  : 'bg-white text-[#9f9f9f] border-[#d9d9d9] line-through'
-                            }`}
-                          >
-                            {size}
-                          </button>
-                        );
-                      })}
-                    </div>
+            <div className="mb-8 border-y border-[#e8e8e8] py-5 space-y-4">
+              {colorOptions.length > 0 && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-[12px] uppercase tracking-[1.2px] font-medium min-w-[58px]">Color</p>
+                  <div className="flex flex-wrap gap-2">
+                    {colorOptions.map((color) => {
+                      const active = selectedColorKey === color.key;
+                      const available = availableColors.has(color.key);
+                      const swatchStyle = color.hex ? { backgroundColor: color.hex } : { backgroundColor: '#dddddd' };
+                      return (
+                        <button
+                          key={color.key}
+                          onClick={() => handleSelectColor(color.key)}
+                          className={`w-[36px] h-[36px] border rounded-full p-[3px] transition-all ${
+                            active ? 'border-lupo-black' : 'border-[#d4d4d4]'
+                          } ${!available ? 'opacity-45' : 'hover:border-lupo-black'}`}
+                          title={color.name}
+                        >
+                          <span className="block w-full h-full rounded-full border border-black/15" style={swatchStyle} />
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
+              )}
 
-                {colorOptions.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-[13px] font-medium uppercase tracking-[1.2px] text-lupo-black min-w-[56px]">
-                      Color
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {colorOptions.map((color) => {
-                        const active = selectedColorKey === color.key;
-                        const available = availableColors.has(color.key);
-                        const isSwatch = Boolean(color.hex);
-                        return (
-                          <button
-                            key={color.key}
-                            onClick={() => handleSelectColor(color.key)}
-                            className={`h-[38px] border transition-all ${
-                              isSwatch ? 'w-[38px] rounded-full p-[3px]' : 'px-4 text-[13px] uppercase tracking-[0.3px]'
-                            } ${
-                              active
-                                ? 'border-lupo-black'
-                                : available
-                                  ? 'border-[#d0d0d0] hover:border-lupo-black'
-                                  : 'border-[#cfcfcf] text-[#9f9f9f] line-through'
-                            }`}
-                          >
-                            {isSwatch ? (
-                              <span
-                                className={`block h-full w-full rounded-full ${!available ? 'opacity-40' : ''}`}
-                                style={{ backgroundColor: color.hex }}
-                                title={color.name}
-                              />
-                            ) : (
-                              color.name
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
+              {sizeOptions.length > 0 && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-[12px] uppercase tracking-[1.2px] font-medium min-w-[58px]">Talle</p>
+                  <div className="flex flex-wrap gap-2">
+                    {sizeOptions.map((size) => {
+                      const active = selectedSize === size;
+                      const available = availableSizes.has(size);
+                      return (
+                        <button
+                          key={size}
+                          onClick={() => handleSelectSize(size)}
+                          className={`h-[36px] min-w-[42px] px-3 border text-[12px] uppercase tracking-[0.5px] transition-all ${
+                            active
+                              ? 'border-lupo-black bg-[#f2f2f2] text-lupo-black'
+                              : available
+                                ? 'border-[#d4d4d4] text-lupo-black hover:border-lupo-black'
+                                : 'border-[#e3e3e3] text-[#9f9f9f] line-through'
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-              {selectedColorLabel && (
-                <p className="text-[13px] text-[#666] mt-4">
-                  Product Color: <span className="text-lupo-black">{selectedColorLabel}</span>
-                </p>
+                </div>
               )}
 
               {!hasStructuredOptions && (
-                <div className="mt-1">
-                  <p className="text-[11px] uppercase tracking-[1.2px] text-[#666] mb-2">Variantes</p>
+                <div>
+                  <p className="text-[12px] uppercase tracking-[1.2px] font-medium mb-2">Variante</p>
                   <div className="flex flex-wrap gap-2">
                     {product.variants.map((variant) => (
                       <button
                         key={variant.id}
                         onClick={() => setSelectedVariantId(variant.id)}
-                        className={`px-4 py-2 text-[12px] border rounded-sm transition-colors ${
+                        className={`h-[36px] px-3 border text-[12px] uppercase tracking-[0.5px] transition-all ${
                           selectedVariant?.id === variant.id
-                            ? 'bg-lupo-black text-white border-lupo-black'
-                            : 'bg-white text-lupo-black border-lupo-border hover:border-lupo-black'
+                            ? 'border-lupo-black bg-[#f2f2f2] text-lupo-black'
+                            : 'border-[#d4d4d4] text-lupo-black hover:border-lupo-black'
                         }`}
                       >
                         {variant.name}
@@ -479,86 +458,48 @@ export function ProductDetail() {
               )}
             </div>
           )}
+
           {(!product.variants || product.variants.length === 0) && (
-            <p className="text-[12px] text-[#777] mb-8">
-              Este producto no tiene variantes estructuradas. Si en Tienda Nube tiene talles/colores, reimportalo
-              para traer la configuración actualizada.
+            <p className="text-[12px] text-[#777] mb-6">
+              Este producto no tiene variantes estructuradas. Reimportá desde Tienda Nube para traer talles y colores.
             </p>
           )}
 
-          <div className="space-y-2 mb-8 text-[13px] text-lupo-text">
-            {displaySku && (
-              <p>
-                <span className="font-medium text-lupo-black">SKU:</span> {displaySku}
-              </p>
-            )}
-            {typeof displayStock === 'number' && (
-              <p>
-                <span className="font-medium text-lupo-black">Stock:</span> {displayStock}
-              </p>
-            )}
-          </div>
+          <button
+            onClick={() => {
+              const suffix = [selectedSizeLabel, selectedColorLabel].filter(Boolean).join(' / ');
+              addToCart({
+                ...product,
+                id: selectedVariant?.id ?? product.id,
+                name: suffix ? `${product.name} - ${suffix}` : product.name,
+                price: displayPrice,
+                sku: product.sku,
+                image: selectedVariant?.image || selectedImage || product.image,
+              });
+            }}
+            disabled={isOutOfStock}
+            className={`w-full py-[14px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors mb-4 ${
+              isOutOfStock
+                ? 'bg-[#c8c8c8] text-white cursor-not-allowed'
+                : 'bg-lupo-black text-white hover:bg-black/80'
+            }`}
+          >
+            {isOutOfStock ? 'Sin stock' : 'Agregar al carrito'}
+          </button>
 
-          <div className="mb-6">
-            <button
-              onClick={() => {
-                const suffix = [selectedSizeLabel, selectedColorLabel].filter(Boolean).join(' / ');
-                addToCart({
-                  ...product,
-                  id: selectedVariant?.id ?? product.id,
-                  name: suffix ? `${product.name} - ${suffix}` : product.name,
-                  price: displayPrice,
-                  sku: displaySku,
-                  image: selectedVariant?.image || selectedImage || product.image,
-                });
-              }}
-              disabled={isOutOfStock}
-              className={`w-full max-w-[420px] px-[32px] py-[14px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors ${
-                isOutOfStock
-                  ? 'bg-[#c8c8c8] text-white cursor-not-allowed'
-                  : 'bg-lupo-black text-white hover:bg-black/80'
-              }`}
-            >
-              {isOutOfStock ? 'Sin stock' : 'Agregar al carrito'}
-            </button>
-            <Link
-              to={`/shop?category=${encodeURIComponent(product.category.toLowerCase())}`}
-              className="inline-block mt-4 text-[12px] uppercase tracking-[1.2px] text-[#777] hover:text-lupo-black transition-colors"
-            >
-              Ver categoría
-            </Link>
-          </div>
+          {typeof displayStock === 'number' && (
+            <p className="text-[12px] text-[#5c5c5c] mb-8">
+              Disponibles: <span className="font-medium text-lupo-black">{displayStock}</span>
+            </p>
+          )}
 
-          <div className="max-w-[420px] border-t border-lupo-border">
-            <details className="border-b border-lupo-border group" open>
-              <summary className="list-none cursor-pointer py-4 flex items-center justify-between text-[13px] font-medium">
-                <span>Fit Details</span>
-                <span className="text-[#777] group-open:rotate-180 transition-transform">⌄</span>
-              </summary>
-              <p className="pb-4 text-[13px] text-lupo-text leading-[1.7]">
-                Prenda de calce regular con selección de talle estándar.
-              </p>
-            </details>
-            <details className="border-b border-lupo-border group">
-              <summary className="list-none cursor-pointer py-4 flex items-center justify-between text-[13px] font-medium">
-                <span>Fabricación & Care</span>
-                <span className="text-[#777] group-open:rotate-180 transition-transform">⌄</span>
-              </summary>
-              <p className="pb-4 text-[13px] text-lupo-text leading-[1.7]">
-                Lavar con agua fría y secar a la sombra para preservar textura y color.
-              </p>
-            </details>
-            <details className="border-b border-lupo-border group">
-              <summary className="list-none cursor-pointer py-4 flex items-center justify-between text-[13px] font-medium">
-                <span>Shipping & Returns</span>
-                <span className="text-[#777] group-open:rotate-180 transition-transform">⌄</span>
-              </summary>
-              <p className="pb-4 text-[13px] text-lupo-text leading-[1.7]">
-                Envíos a todo el país. Cambios y devoluciones según política vigente.
-              </p>
-            </details>
-          </div>
-        </div>
+          {richDescription && (
+            <div
+              className="product-description text-[14px] text-lupo-text leading-[1.8] border-t border-[#e8e8e8] pt-6"
+              dangerouslySetInnerHTML={{ __html: richDescription }}
+            />
+          )}
+        </aside>
       </div>
 
       {related.length > 0 && (

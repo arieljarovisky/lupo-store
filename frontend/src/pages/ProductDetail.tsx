@@ -334,7 +334,7 @@ export function ProductDetail() {
   }
 
   return (
-    <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] bg-[#fafafa]">
+    <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] bg-white">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(380px,520px)_1fr] gap-10 lg:gap-16 items-start">
         <div className="grid grid-cols-[76px_1fr] gap-3 md:gap-4 w-full">
           <div className="space-y-2">
@@ -362,29 +362,31 @@ export function ProductDetail() {
           </div>
         </div>
 
-        <div className="flex flex-col max-w-[760px] bg-white border border-[#eee] p-6 md:p-10 rounded-sm shadow-[0_8px_24px_rgba(0,0,0,0.03)]">
-          <p className="text-[11px] text-[#777] uppercase tracking-[1.5px] mb-4">{product.category}</p>
-          <h1 className="text-[36px] md:text-[46px] font-light tracking-[-1px] leading-[1.1] mb-5">
+        <div className="flex flex-col max-w-[520px]">
+          <p className="text-[12px] text-[#8b8b8b] mb-6">Shop / {product.category}</p>
+          <h1 className="text-[34px] md:text-[40px] font-medium tracking-[-0.6px] leading-[1.1] mb-4">
             {product.name}
           </h1>
-          <p className="text-[26px] font-medium text-lupo-black mb-6">${displayPrice.toFixed(2)}</p>
+          <p className="text-[30px] font-medium text-lupo-black mb-8">${displayPrice.toFixed(2)}</p>
           {richDescription ? (
             <div
-              className="product-description text-[15px] text-lupo-text leading-[1.8] mb-8"
+              className="product-description text-[14px] text-lupo-text leading-[1.8] mb-8 max-w-[420px]"
               dangerouslySetInnerHTML={{ __html: richDescription }}
             />
           ) : (
-            <p className="text-[15px] text-lupo-text leading-[1.8] mb-8">
+            <p className="text-[14px] text-lupo-text leading-[1.8] mb-8 max-w-[420px]">
               Sin descripción disponible para este producto.
             </p>
           )}
 
           {product.variants && product.variants.length > 0 && (
-            <div className="mb-8 py-4 border-y border-lupo-border">
+            <div className="mb-8">
               <div className="space-y-4">
                 {sizeOptions.length > 0 && (
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-[12px] uppercase tracking-[2px] text-lupo-black min-w-[52px]">Talle</p>
+                    <p className="text-[13px] font-medium uppercase tracking-[1.2px] text-lupo-black min-w-[56px]">
+                      Talle
+                    </p>
                     <div className="flex flex-wrap gap-2">
                       {sizeOptions.map((size) => {
                         const active = selectedSize === size;
@@ -393,12 +395,12 @@ export function ProductDetail() {
                           <button
                             key={size}
                             onClick={() => handleSelectSize(size)}
-                            className={`h-[38px] px-4 text-[13px] border uppercase tracking-[0.5px] transition-all ${
+                            className={`h-[38px] min-w-[44px] px-3 text-[13px] border uppercase tracking-[0.5px] transition-all ${
                               active
-                                ? 'bg-[#efefef] text-lupo-black border-lupo-black'
+                                ? 'bg-[#f3f3f3] text-lupo-black border-lupo-black'
                                 : available
-                                  ? 'bg-white text-lupo-black border-[#2a2a2a] hover:bg-[#f7f7f7]'
-                                  : 'bg-white text-[#9f9f9f] border-[#cfcfcf] line-through'
+                                  ? 'bg-white text-lupo-black border-[#d0d0d0] hover:border-lupo-black'
+                                  : 'bg-white text-[#9f9f9f] border-[#d9d9d9] line-through'
                             }`}
                           >
                             {size}
@@ -411,7 +413,9 @@ export function ProductDetail() {
 
                 {colorOptions.length > 0 && (
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-[12px] uppercase tracking-[2px] text-lupo-black min-w-[52px]">Color</p>
+                    <p className="text-[13px] font-medium uppercase tracking-[1.2px] text-lupo-black min-w-[56px]">
+                      Color
+                    </p>
                     <div className="flex flex-wrap items-center gap-2">
                       {colorOptions.map((color) => {
                         const active = selectedColorKey === color.key;
@@ -422,18 +426,18 @@ export function ProductDetail() {
                             key={color.key}
                             onClick={() => handleSelectColor(color.key)}
                             className={`h-[38px] border transition-all ${
-                              isSwatch ? 'w-[38px] p-[3px]' : 'px-4 text-[13px] uppercase tracking-[0.3px]'
+                              isSwatch ? 'w-[38px] rounded-full p-[3px]' : 'px-4 text-[13px] uppercase tracking-[0.3px]'
                             } ${
                               active
                                 ? 'border-lupo-black'
                                 : available
-                                  ? 'border-[#2a2a2a] hover:bg-[#f7f7f7]'
+                                  ? 'border-[#d0d0d0] hover:border-lupo-black'
                                   : 'border-[#cfcfcf] text-[#9f9f9f] line-through'
                             }`}
                           >
                             {isSwatch ? (
                               <span
-                                className={`block h-full w-full ${!available ? 'opacity-40' : ''}`}
+                                className={`block h-full w-full rounded-full ${!available ? 'opacity-40' : ''}`}
                                 style={{ backgroundColor: color.hex }}
                                 title={color.name}
                               />
@@ -447,6 +451,11 @@ export function ProductDetail() {
                   </div>
                 )}
               </div>
+              {selectedColorLabel && (
+                <p className="text-[13px] text-[#666] mt-4">
+                  Product Color: <span className="text-lupo-black">{selectedColorLabel}</span>
+                </p>
+              )}
 
               {!hasStructuredOptions && (
                 <div className="mt-1">
@@ -477,17 +486,7 @@ export function ProductDetail() {
             </p>
           )}
 
-          <div className="space-y-3 mb-8 text-[13px] text-lupo-text">
-            {selectedSizeLabel && (
-              <p>
-                <span className="font-medium text-lupo-black">Talle:</span> {selectedSizeLabel}
-              </p>
-            )}
-            {selectedColorLabel && (
-              <p>
-                <span className="font-medium text-lupo-black">Color:</span> {selectedColorLabel}
-              </p>
-            )}
+          <div className="space-y-2 mb-8 text-[13px] text-lupo-text">
             {displaySku && (
               <p>
                 <span className="font-medium text-lupo-black">SKU:</span> {displaySku}
@@ -500,7 +499,7 @@ export function ProductDetail() {
             )}
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="mb-6">
             <button
               onClick={() => {
                 const suffix = [selectedSizeLabel, selectedColorLabel].filter(Boolean).join(' / ');
@@ -514,7 +513,7 @@ export function ProductDetail() {
                 });
               }}
               disabled={isOutOfStock}
-              className={`px-[32px] py-[14px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors ${
+              className={`w-full max-w-[420px] px-[32px] py-[14px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors ${
                 isOutOfStock
                   ? 'bg-[#c8c8c8] text-white cursor-not-allowed'
                   : 'bg-lupo-black text-white hover:bg-black/80'
@@ -524,10 +523,40 @@ export function ProductDetail() {
             </button>
             <Link
               to={`/shop?category=${encodeURIComponent(product.category.toLowerCase())}`}
-              className="border border-lupo-border px-[28px] py-[14px] uppercase text-[11px] tracking-[2px] font-semibold hover:border-lupo-black transition-colors"
+              className="inline-block mt-4 text-[12px] uppercase tracking-[1.2px] text-[#777] hover:text-lupo-black transition-colors"
             >
               Ver categoría
             </Link>
+          </div>
+
+          <div className="max-w-[420px] border-t border-lupo-border">
+            <details className="border-b border-lupo-border group" open>
+              <summary className="list-none cursor-pointer py-4 flex items-center justify-between text-[13px] font-medium">
+                <span>Fit Details</span>
+                <span className="text-[#777] group-open:rotate-180 transition-transform">⌄</span>
+              </summary>
+              <p className="pb-4 text-[13px] text-lupo-text leading-[1.7]">
+                Prenda de calce regular con selección de talle estándar.
+              </p>
+            </details>
+            <details className="border-b border-lupo-border group">
+              <summary className="list-none cursor-pointer py-4 flex items-center justify-between text-[13px] font-medium">
+                <span>Fabricación & Care</span>
+                <span className="text-[#777] group-open:rotate-180 transition-transform">⌄</span>
+              </summary>
+              <p className="pb-4 text-[13px] text-lupo-text leading-[1.7]">
+                Lavar con agua fría y secar a la sombra para preservar textura y color.
+              </p>
+            </details>
+            <details className="border-b border-lupo-border group">
+              <summary className="list-none cursor-pointer py-4 flex items-center justify-between text-[13px] font-medium">
+                <span>Shipping & Returns</span>
+                <span className="text-[#777] group-open:rotate-180 transition-transform">⌄</span>
+              </summary>
+              <p className="pb-4 text-[13px] text-lupo-text leading-[1.7]">
+                Envíos a todo el país. Cambios y devoluciones según política vigente.
+              </p>
+            </details>
           </div>
         </div>
       </div>

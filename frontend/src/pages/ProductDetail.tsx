@@ -14,6 +14,19 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Tienda Nube / editores a veces guardan `&nbsp` o `&nbsp;` como texto plano.
+ * Si luego escapamos `&` a `&amp;`, el usuario ve literal "&nbsp" en pantalla.
+ * Normalizamos a espacio real antes de escapar o parsear HTML.
+ */
+function normalizeDescriptionSource(raw: string): string {
+  return raw
+    .replace(/&amp;nbsp;?/gi, ' ')
+    .replace(/&nbsp;?/gi, ' ')
+    .replace(/&#160;|&#x0*A0;/gi, ' ')
+    .replace(/\u00a0/g, ' ');
+}
+
 function sanitizeDescriptionHtml(raw: string): string {
   if (typeof window === 'undefined') return raw;
   const parser = new DOMParser();
@@ -298,7 +311,7 @@ export function ProductDetail() {
     colorOptions.find((color) => color.key === selectedColorKey)?.name ??
     (selectedVariant ? variantColor(selectedVariant)?.name ?? null : null);
   const richDescription = useMemo(() => {
-    const d = product?.description?.trim();
+    const d = normalizeDescriptionSource(product?.description?.trim() ?? '');
     if (!d) return '';
     if (!/[<][a-z!/]/i.test(d)) {
       return `<p>${escapeHtml(d).replace(/\n/g, '<br/>')}</p>`;

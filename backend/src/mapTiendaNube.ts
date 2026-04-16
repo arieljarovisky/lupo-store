@@ -106,29 +106,68 @@ function valuesFromVariant(raw: Record<string, unknown>): string[] {
   return [...new Set(out.filter(Boolean))];
 }
 
-function variantLabel(raw: Record<string, unknown>): string {
+/** Código de barras / SKU solo dígitos (ej. EAN-13), no sirve como etiqueta visible. */
+function looksLikeBarcodeOrNumericSku(s: string): boolean {
+  const t = s.trim();
+  if (t.length < 8) return false;
+  return /^\d+$/.test(t);
+}
+
+/**
+ * Etiqueta legible para la variante: color/talle u opciones humanas.
+ * Evita mostrar el EAN como "nombre" cuando TN lo guarda en `name`.
+ */
+function buildVariantDisplayName(
+  raw: Record<string, unknown>,
+  catalog: VariantOptionCatalog,
+  variantIndex: number
+): string {
+  const optionValues = optionValuesFromVariant(raw, catalog);
+  const inferred = inferVariantDetails(optionValues);
+
+  const fromInferred: string[] = [];
+  if (inferred.colorName) fromInferred.push(inferred.colorName);
+  if (inferred.size) fromInferred.push(inferred.size);
+  if (fromInferred.length > 0) return fromInferred.join(' · ');
+
+  const humanOptionValues = optionValues
+    .map((ov) => ov.value.trim())
+    .filter((v) => v && !looksLikeBarcodeOrNumericSku(v));
+  if (humanOptionValues.length > 0) return [...new Set(humanOptionValues)].join(' · ');
+
+  const fromVals = valuesFromVariant(raw).filter((p) => !looksLikeBarcodeOrNumericSku(p));
+  if (fromVals.length > 0) return fromVals.join(' · ');
+
   const direct =
     pickLocalized(raw.name) ||
     pickLocalized(raw.variant_name) ||
     pickLocalized(raw.label) ||
     String(raw.sku ?? '').trim();
-  if (direct) return direct;
-  const parts = valuesFromVariant(raw);
-  if (parts.length > 0) return parts.join(' / ');
-  return 'Variante';
+  if (direct && !looksLikeBarcodeOrNumericSku(direct)) return direct;
+
+  const barcode =
+    direct ||
+    String(raw.sku ?? '').trim() ||
+    pickLocalized(raw.barcode) ||
+    pickLocalized(raw.ean) ||
+    '';
+  if (barcode && looksLikeBarcodeOrNumericSku(barcode)) {
+    return `Presentación ${variantIndex + 1} (ref. ${barcode.slice(-6)})`;
+  }
+  return `Variante ${variantIndex + 1}`;
 }
 
 function isLikelySize(value: string): boolean {
   const v = value.trim().toUpperCase();
   if (!v) return false;
-  if (/^(XXS|XS|S|M|L|XL|XXL|XXXL)$/.test(v)) return true;
+  if (/^(XXS|XS|S|M|L|XL|XXL|XXXL|XXG|XG|G|EG|GG|XGG|U|UNI|UNICO|ÚNICO|Única|UNICA)$/.test(v)) return true;
   if (/^\d{2,3}$/.test(v)) return true;
   if (/^\d+\s*-\s*\d+$/.test(v)) return true;
   return /(TALLE|TALLA|SIZE)/i.test(value);
 }
 
 function isColorName(value: string): boolean {
-  return /(NEGRO|BLANCO|AZUL|ROJO|VERDE|GRIS|BEIGE|BORDO|ROSA|MARRON|BROWN|BLACK|WHITE|BLUE|RED|GREEN|GREY|GRAY|PINK|BEIGE|PURPLE|VIOLET)/i.test(
+  return /(NEGRO|BLANCO|AZUL(\s+MARINO)?|ROJO|VERDE|GRIS|BEIGE|BORD[OÓ]|ROSA|MARR[OÓ]N|VIOLETA|NARANJA|AMARILLO|CELESTE|BROWN|BLACK|WHITE|BLUE|RED|GREEN|GREY|GRAY|PINK|PURPLE|VIOLET|NAVY)/i.test(
     value
   );
 }
@@ -266,6 +305,22 @@ function optionValuesFromVariant(
     const name = pickLocalized(raw[`option${i}_name`]) || `Opción ${i}`;
     out.push({ name, value });
   }
+
+  const props = raw.properties;
+  if (Array.isArray(props)) {
+    for (const p of props) {
+      if (!p || typeof p !== 'object') continue;
+      const o = p as Record<string, unknown>;
+      const propName =
+        pickLocalized(o.name) || pickLocalized(o.property) || pickLocalized(o.key) || 'Propiedad';
+      const propValue =
+        pickLocalized(o.value) || pickLocalized(o.text) || String(o.val ?? '').trim();
+      if (propName.trim() && propValue.trim()) {
+        out.push({ name: propName.trim(), value: propValue.trim() });
+      }
+    }
+  }
+
   return out;
 }
 
@@ -274,7 +329,7 @@ function mapVariants(
   imagesById: Map<string, string>,
   catalog: VariantOptionCatalog
 ): ProductVariant[] {
-  const mapped: Array<ProductVariant | null> = rawVariants.map((v) => {
+  const mapped: Array<ProductVariant | null> = rawVariants.map((v, variantIndex) => {
       const id = String(v.id ?? '').trim();
       if (!id) return null;
       const priceNum = Number.parseFloat(String(v.price ?? '0').replace(',', '.'));
@@ -292,7 +347,7 @@ function mapVariants(
         undefined;
       const item: ProductVariant = {
         id,
-        name: variantLabel(v),
+        name: buildVariantDisplayName(v, catalog, variantIndex),
         price,
         stockQuantity,
         sku: v.sku != null ? String(v.sku).trim() || undefined : undefined,

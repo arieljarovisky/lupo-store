@@ -13,6 +13,17 @@ import { orderRouter } from './routes/orderRoutes.js';
 import { adminRouter } from './routes/adminRoutes.js';
 import { hubRouter } from './routes/hubRoutes.js';
 import { requireAdmin } from './middleware/auth.js';
+import {
+  buildTiendaNubeAuthorizeUrl,
+  createTiendaNubeOAuthState,
+  assertValidTiendaNubeOAuthState,
+  exchangeTiendaNubeAuthorizationCode,
+} from './tiendanubeOAuth.js';
+import {
+  clearTiendaNubeIntegration,
+  getTiendaNubeIntegration,
+  upsertTiendaNubeIntegration,
+} from './repos/tiendanubeIntegrationRepo.js';
 
 const PORT = Number(process.env.PORT) || 4000;
 const TN_STORE_ID = process.env.TIENDANUBE_STORE_ID?.trim();
@@ -43,6 +54,12 @@ function publicProduct(p: Product) {
   };
 }
 
+function adminDashboardUrl(req: express.Request): string {
+  const explicit = process.env.ADMIN_DASHBOARD_URL?.trim() || process.env.FRONTEND_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, '') + '/admin';
+  return `${req.protocol}://${req.get('host')}/admin`;
+}
+
 app.get('/api/health', async (_req, res) => {
   try {
     await pingDb();
@@ -63,20 +80,93 @@ app.get('/api/products', async (_req, res) => {
   }
 });
 
+app.get('/api/admin/tiendanube/status', requireAdmin, async (_req, res) => {
+  try {
+    const dbIntegration = await getTiendaNubeIntegration();
+    const envConnected = Boolean(TN_STORE_ID && TN_TOKEN);
+    res.json({
+      connected: Boolean(dbIntegration) || envConnected,
+      source: dbIntegration ? 'oauth' : envConnected ? 'env' : 'none',
+      storeId: dbIntegration?.storeId ?? TN_STORE_ID ?? null,
+      connectedAt: dbIntegration?.connectedAt ?? null,
+      hasOauthConfig: Boolean(
+        process.env.TIENDANUBE_CLIENT_ID?.trim() &&
+          process.env.TIENDANUBE_CLIENT_SECRET?.trim() &&
+          process.env.TIENDANUBE_REDIRECT_URI?.trim()
+      ),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'No se pudo leer el estado de Tienda Nube.' });
+  }
+});
+
+app.post('/api/admin/tiendanube/oauth/start', requireAdmin, async (_req, res) => {
+  try {
+    const state = createTiendaNubeOAuthState();
+    const url = buildTiendaNubeAuthorizeUrl(state);
+    res.json({ url });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'No se pudo iniciar OAuth.';
+    res.status(400).json({ error: msg });
+  }
+});
+
+app.get('/api/admin/tiendanube/oauth/callback', async (req, res) => {
+  const backToAdmin = adminDashboardUrl(req);
+  try {
+    const code = String(req.query.code ?? '').trim();
+    const state = String(req.query.state ?? '').trim();
+    if (!code || !state) {
+      res.redirect(`${backToAdmin}?tn_oauth=error&message=${encodeURIComponent('Faltan code/state.')}`);
+      return;
+    }
+    assertValidTiendaNubeOAuthState(state);
+    const oauth = await exchangeTiendaNubeAuthorizationCode(code);
+    await upsertTiendaNubeIntegration({
+      storeId: oauth.storeId,
+      accessToken: oauth.accessToken,
+      tokenType: oauth.tokenType,
+      scope: oauth.scope,
+      userId: oauth.userId,
+    });
+    res.redirect(`${backToAdmin}?tn_oauth=ok&store=${encodeURIComponent(oauth.storeId)}`);
+  } catch (e) {
+    console.error(e);
+    const msg = e instanceof Error ? e.message : 'No se pudo completar OAuth.';
+    res.redirect(`${backToAdmin}?tn_oauth=error&message=${encodeURIComponent(msg)}`);
+  }
+});
+
+app.delete('/api/admin/tiendanube/connection', requireAdmin, async (_req, res) => {
+  try {
+    await clearTiendaNubeIntegration();
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'No se pudo desconectar Tienda Nube.' });
+  }
+});
+
 app.post('/api/admin/import/tiendanube', requireAdmin, async (_req, res) => {
-  if (!TN_STORE_ID || !TN_TOKEN || !TN_USER_AGENT) {
+  const integration = await getTiendaNubeIntegration();
+  const storeId = integration?.storeId || TN_STORE_ID;
+  const accessToken = integration?.accessToken || TN_TOKEN;
+  const userAgent = TN_USER_AGENT || 'LupoStore (admin@localhost)';
+
+  if (!storeId || !accessToken) {
     res.status(400).json({
       error:
-        'Falta configuración de Tienda Nube. Definí TIENDANUBE_STORE_ID, TIENDANUBE_ACCESS_TOKEN y TIENDANUBE_USER_AGENT en el entorno del backend.',
+        'No hay conexión con Tienda Nube. Conectá tu tienda por OAuth desde el panel admin o definí TIENDANUBE_STORE_ID + TIENDANUBE_ACCESS_TOKEN.',
     });
     return;
   }
 
   try {
     const rawList = await fetchAllProductsFromTiendaNube({
-      storeId: TN_STORE_ID,
-      accessToken: TN_TOKEN,
-      userAgent: TN_USER_AGENT,
+      storeId,
+      accessToken,
+      userAgent,
       apiVersion: TN_API_VERSION,
     });
 

@@ -153,17 +153,110 @@ export async function adminLogin(email: string, password: string): Promise<{
   return { ok: true, token: data.token, role: data.role };
 }
 
+function adminAuthHeaders(): Record<string, string> {
+  const token = getAdminToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+export async function getTiendaNubeConnectionStatus(): Promise<{
+  connected: boolean;
+  source: 'oauth' | 'env' | 'none';
+  storeId: string | null;
+  connectedAt: string | null;
+  hasOauthConfig: boolean;
+  error?: string;
+}> {
+  const base = apiBase();
+  const url = base ? `${base}/api/admin/tiendanube/status` : '/api/admin/tiendanube/status';
+  try {
+    const res = await fetch(url, { headers: adminAuthHeaders() });
+    const text = await res.text();
+    const data = JSON.parse(text) as {
+      connected?: boolean;
+      source?: 'oauth' | 'env' | 'none';
+      storeId?: string | null;
+      connectedAt?: string | null;
+      hasOauthConfig?: boolean;
+      error?: string;
+    };
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) clearAdminToken();
+      return {
+        connected: false,
+        source: 'none',
+        storeId: null,
+        connectedAt: null,
+        hasOauthConfig: false,
+        error: data.error || `HTTP ${res.status}`,
+      };
+    }
+    return {
+      connected: Boolean(data.connected),
+      source: data.source ?? 'none',
+      storeId: data.storeId ?? null,
+      connectedAt: data.connectedAt ?? null,
+      hasOauthConfig: Boolean(data.hasOauthConfig),
+    };
+  } catch (e) {
+    if (e instanceof TypeError) {
+      return {
+        connected: false,
+        source: 'none',
+        storeId: null,
+        connectedAt: null,
+        hasOauthConfig: false,
+        error: networkFetchErrorMessage(url, e),
+      };
+    }
+    throw e;
+  }
+}
+
+export async function startTiendaNubeOAuth(): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const base = apiBase();
+  const url = base ? `${base}/api/admin/tiendanube/oauth/start` : '/api/admin/tiendanube/oauth/start';
+  try {
+    const res = await fetch(url, { method: 'POST', headers: adminAuthHeaders() });
+    const text = await res.text();
+    const data = JSON.parse(text) as { url?: string; error?: string };
+    if (!res.ok || !data.url) {
+      if (res.status === 401 || res.status === 403) clearAdminToken();
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return { ok: true, url: data.url };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
+export async function disconnectTiendaNube(): Promise<{ ok: boolean; error?: string }> {
+  const base = apiBase();
+  const url = base ? `${base}/api/admin/tiendanube/connection` : '/api/admin/tiendanube/connection';
+  try {
+    const res = await fetch(url, { method: 'DELETE', headers: adminAuthHeaders() });
+    const text = await res.text();
+    const data = text ? (JSON.parse(text) as { error?: string }) : {};
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) clearAdminToken();
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
 export async function importFromTiendaNube(): Promise<{
   ok: boolean;
   imported: number;
   message?: string;
   error?: string;
 }> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  const adminToken = getAdminToken();
-  if (adminToken) headers.Authorization = `Bearer ${adminToken}`;
+  const headers: Record<string, string> = adminAuthHeaders();
 
   const base = apiBase();
   const importUrl = base ? `${base}/api/admin/import/tiendanube` : '/api/admin/import/tiendanube';

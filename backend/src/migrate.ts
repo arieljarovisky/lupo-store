@@ -65,6 +65,20 @@ export async function runMigrations(p: Pool): Promise<void> {
   `);
 
   await p.query(`
+    CREATE TABLE IF NOT EXISTS tiendanube_integrations (
+      id TINYINT UNSIGNED NOT NULL,
+      store_id VARCHAR(64) NOT NULL,
+      access_token TEXT NOT NULL,
+      token_type VARCHAR(64) DEFAULT NULL,
+      scope VARCHAR(255) DEFAULT NULL,
+      user_id VARCHAR(64) DEFAULT NULL,
+      connected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await p.query(`
     CREATE TABLE IF NOT EXISTS orders (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       customer_id BIGINT UNSIGNED DEFAULT NULL,

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-const DEFAULT_AUTHORIZE_URL = 'https://www.tiendanube.com/apps/authorize';
+const DEFAULT_AUTHORIZE_URL = 'https://www.tiendanube.com/apps/{app_id}/authorize';
 const DEFAULT_TOKEN_URL = 'https://www.tiendanube.com/apps/authorize/token';
 
 interface OAuthStatePayload {
@@ -84,11 +84,14 @@ export function resolveTiendaNubeOAuthConfig(): {
 
 export function buildTiendaNubeAuthorizeUrl(state: string): string {
   const cfg = resolveTiendaNubeOAuthConfig();
-  const u = new URL(cfg.authorizeUrl);
-  u.searchParams.set('client_id', cfg.clientId);
-  u.searchParams.set('response_type', 'code');
-  u.searchParams.set('redirect_uri', cfg.redirectUri);
+  const authorizeBase = cfg.authorizeUrl.includes('{app_id}')
+    ? cfg.authorizeUrl.replace('{app_id}', encodeURIComponent(cfg.clientId))
+    : cfg.authorizeUrl.replace(/\/$/, '') + `/${encodeURIComponent(cfg.clientId)}/authorize`;
+  const u = new URL(authorizeBase);
+  // Tienda Nube usa el app_id en la URL y retorna code/state al redirect configurado.
+  // Enviamos state para proteger el callback y redirect_uri para mayor compatibilidad.
   u.searchParams.set('state', state);
+  u.searchParams.set('redirect_uri', cfg.redirectUri);
   return u.toString();
 }
 

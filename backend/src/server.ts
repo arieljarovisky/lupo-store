@@ -1,10 +1,17 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
+import { initDb, pingDb } from './db.js';
 import { mapTiendaNubeProduct } from './mapTiendaNube.js';
 import { fetchAllProductsFromTiendaNube } from './tiendanubeClient.js';
 import { loadProducts, saveProducts } from './productStore.js';
 import type { Product } from './types.js';
+import { authRouter } from './routes/authRoutes.js';
+import { orderRouter } from './routes/orderRoutes.js';
+import { adminRouter } from './routes/adminRoutes.js';
+import { hubRouter } from './routes/hubRoutes.js';
 
 const PORT = Number(process.env.PORT) || 4000;
 const IMPORT_API_KEY = process.env.IMPORT_API_KEY?.trim();
@@ -23,19 +30,27 @@ function assertImportKey(req: express.Request): boolean {
   return key === IMPORT_API_KEY;
 }
 
-function publicProduct(p: Product): Product {
+function publicProduct(p: Product) {
   return {
     id: p.id,
+    sku: p.sku,
     name: p.name,
     price: p.price,
+    stockQuantity: p.stockQuantity,
     image: p.image,
     category: p.category,
     description: p.description,
   };
 }
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true });
+app.get('/api/health', async (_req, res) => {
+  try {
+    await pingDb();
+    res.json({ ok: true, database: 'mysql' });
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ ok: false, error: 'Base de datos no disponible.' });
+  }
 });
 
 app.get('/api/products', async (_req, res) => {
@@ -72,8 +87,8 @@ app.post('/api/admin/import/tiendanube', async (req, res) => {
 
     const mapped: Product[] = [];
     for (const raw of rawList) {
-      const p = mapTiendaNubeProduct(raw);
-      if (p) mapped.push(p);
+      const pr = mapTiendaNubeProduct(raw);
+      if (pr) mapped.push(pr);
     }
 
     await saveProducts(mapped);
@@ -90,6 +105,31 @@ app.post('/api/admin/import/tiendanube', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`API en http://localhost:${PORT}`);
+app.use('/api/auth', authRouter);
+app.use('/api/orders', orderRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/hub', hubRouter);
+
+const publicDir = path.join(process.cwd(), 'frontend/dist');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      next();
+      return;
+    }
+    res.sendFile(path.join(publicDir, 'index.html'), (err) => next(err));
+  });
+}
+
+async function main(): Promise<void> {
+  await initDb();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor en el puerto ${PORT}`);
+  });
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });

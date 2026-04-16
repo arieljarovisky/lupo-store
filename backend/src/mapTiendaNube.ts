@@ -41,6 +41,12 @@ export function mapTiendaNubeProduct(raw: Record<string, unknown>): Product | nu
     if (!Number.isNaN(n)) price = Math.round(n);
   }
 
+  let stockQuantity = 0;
+  if (firstVariant?.stock != null) {
+    const s = parseInt(String(firstVariant.stock), 10);
+    if (!Number.isNaN(s)) stockQuantity = Math.max(0, s);
+  }
+
   const images = Array.isArray(raw.images) ? (raw.images as Record<string, unknown>[]) : [];
   let image = '';
   if (images[0]) {
@@ -71,10 +77,13 @@ export function mapTiendaNubeProduct(raw: Record<string, unknown>): Product | nu
     id,
     name,
     price,
+    stockQuantity,
     image,
     category,
     description,
     externalId: id,
+    externalTnId: id,
     source: 'tiendanube',
+    syncSource: 'tiendanube',
   };
 }

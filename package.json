@@ -9,7 +9,7 @@
     "dev": "concurrently -n front,back -c blue,green \"npm run dev -w frontend\" \"npm run dev -w backend\"",
     "build": "npm run build -w frontend && npm run build -w backend",
     "lint": "npm run lint -w frontend",
-    "start": "npm run start -w backend"
+    "start": "node backend/dist/server.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

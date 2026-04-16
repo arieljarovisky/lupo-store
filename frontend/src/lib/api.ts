@@ -1,12 +1,27 @@
 import type { Product } from '../context/CartContext';
 
+/**
+ * Sin `https://` o `http://`, `fetch` interpreta el valor como ruta relativa al sitio actual
+ * (p. ej. `mi-app.vercel.app/tu-dominio.railway.app/api/...` → 404/HTML).
+ */
+function normalizeApiBase(raw: string): string {
+  const s = raw.trim().replace(/\/$/, '');
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith('/')) return s;
+  if (/^(localhost|127\.0\.0\.1)(\b|$|:)/i.test(s)) {
+    return `http://${s}`;
+  }
+  return `https://${s}`;
+}
+
 /** Base del API: Vite (build), o window.__LUPO_API_BASE__ en runtime, o mismo origen. */
 export function apiBase(): string {
   if (typeof window !== 'undefined' && window.__LUPO_API_BASE__?.trim()) {
-    return window.__LUPO_API_BASE__.trim().replace(/\/$/, '');
+    return normalizeApiBase(window.__LUPO_API_BASE__);
   }
   const b = import.meta.env.VITE_API_URL?.trim();
-  return b ? b.replace(/\/$/, '') : '';
+  return b ? normalizeApiBase(b) : '';
 }
 
 function apiErrorMessage(res: Response, bodyText: string): string {

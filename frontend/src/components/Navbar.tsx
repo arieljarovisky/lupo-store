@@ -42,19 +42,28 @@ export function Navbar() {
           <Link to="/shop?category=deportivo" className="hover:opacity-70 transition-opacity">Deportivo</Link>
         </div>
 
-        {/* Cart Button */}
-        <button 
-          className="relative text-[12px] font-medium tracking-[1.5px] uppercase hover:opacity-70 transition-opacity flex items-center"
-          onClick={() => setIsCartOpen(true)}
-        >
-          <span className="hidden md:inline mr-2">Carrito ({cartCount})</span>
-          <ShoppingBag size={20} strokeWidth={1.5} className="md:hidden" />
-          {cartCount > 0 && (
-            <span className="md:hidden absolute -top-1 -right-1 bg-lupo-black text-white text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">
-              {cartCount}
-            </span>
-          )}
-        </button>
+        <div className="flex items-center gap-4 md:gap-6">
+          <Link
+            to="/admin"
+            className="text-[12px] font-medium tracking-[1.5px] uppercase hover:opacity-70 transition-opacity"
+          >
+            Iniciar sesión
+          </Link>
+
+          {/* Cart Button */}
+          <button
+            className="relative text-[12px] font-medium tracking-[1.5px] uppercase hover:opacity-70 transition-opacity flex items-center"
+            onClick={() => setIsCartOpen(true)}
+          >
+            <span className="hidden md:inline mr-2">Carrito ({cartCount})</span>
+            <ShoppingBag size={20} strokeWidth={1.5} className="md:hidden" />
+            {cartCount > 0 && (
+              <span className="md:hidden absolute -top-1 -right-1 bg-lupo-black text-white text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">
+                {cartCount}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu */}
@@ -65,6 +74,7 @@ export function Navbar() {
             <Link to="/shop?category=hombre">Hombre</Link>
             <Link to="/shop?category=damas">Damas</Link>
             <Link to="/shop?category=deportivo">Deportivo</Link>
+            <Link to="/admin">Iniciar sesión</Link>
           </div>
         </div>
       )}

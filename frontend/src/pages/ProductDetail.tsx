@@ -357,20 +357,28 @@ export function ProductDetail() {
     return sanitizeDescriptionHtml(d);
   }, [product?.description]);
   const galleryImages = useMemo(() => {
+    const sameColorImages =
+      selectedColorKey && variantRows.length
+        ? uniqStrings(
+            variantRows
+              .filter((row) => row.color?.key === selectedColorKey && row.variant.image?.trim())
+              .map((row) => row.variant.image as string)
+          )
+        : [];
     const list = uniqStrings([
       selectedVariant?.image,
+      ...sameColorImages,
       ...(product?.images ?? []),
       product?.image,
     ]);
     return list.length > 0 ? list : ['https://placehold.co/800x1000/f0f0f0/666?text=Sin+imagen'];
-  }, [product?.image, product?.images, selectedVariant?.image]);
+  }, [product?.image, product?.images, selectedColorKey, selectedVariant?.image, variantRows]);
 
+  /** Al cambiar color (o variante), la foto principal debe ser la de esa variante / ese color. */
   useEffect(() => {
     if (!galleryImages.length) return;
-    if (!selectedImage || !galleryImages.includes(selectedImage)) {
-      setSelectedImage(galleryImages[0]);
-    }
-  }, [galleryImages, selectedImage]);
+    setSelectedImage(galleryImages[0]);
+  }, [selectedVariant?.id, selectedColorKey, galleryImages]);
 
   const related = products
     .filter((p) => p.id !== productId && p.category === product?.category)

@@ -169,29 +169,91 @@ function colorNameWithoutSizeTokens(full: string): string {
   return nonSizes.length > 0 ? nonSizes.join(' · ') : t;
 }
 
+/**
+ * Nombre de color (ES/EN) → hex aproximado para swatches cuando TN no manda RGB.
+ * Las claves van sin acentos (se comparan con normalizeToken). Orden de búsqueda: más largas primero.
+ */
+const COLOR_NAME_TO_HEX: Record<string, string> = {
+  'azul marino': '#1e3a5f',
+  'azul francia': '#2b4c7e',
+  'azul petroleo': '#1b4d4d',
+  'verde agua': '#7eb6a2',
+  'verde militar': '#4b5320',
+  'verde manzana': '#7cb518',
+  'rosa viejo': '#c4a4a4',
+  'rosa chicle': '#ff69b4',
+  'gris melange': '#9ca3a8',
+  'gris perla': '#c5c5c5',
+  'gris topo': '#6d6d6d',
+  'gris oscuro': '#4a4a4a',
+  'gris claro': '#d3d3d3',
+  'marron chocolate': '#5c3d2e',
+  'marron suela': '#8b6914',
+  burdeos: '#6e1b2f',
+  burgundy: '#722f37',
+  bordo: '#722f37',
+  granate: '#6b2d3c',
+  vino: '#5c1f2e',
+  ciruela: '#5c3d4d',
+  coral: '#ff7f50',
+  salmon: '#fa8072',
+  durazno: '#ffd4a8',
+  mostaza: '#d4a017',
+  ocre: '#c8a055',
+  natural: '#e8dcc8',
+  crudo: '#f2ebe0',
+  hueso: '#e8e4d9',
+  offwhite: '#f7f7f2',
+  celeste: '#87ceeb',
+  turquesa: '#40e0d0',
+  petroleo: '#1b4d4d',
+  violeta: '#7b68a6',
+  lila: '#c8a2c8',
+  fucsia: '#d946a3',
+  magenta: '#c71585',
+  lavanda: '#e6e6fa',
+  negro: '#111111',
+  black: '#111111',
+  blanco: '#f5f5f5',
+  white: '#f5f5f5',
+  blancoroto: '#f0f0f0',
+  azul: '#355c8c',
+  blue: '#355c8c',
+  rojo: '#a42d2d',
+  red: '#a42d2d',
+  verde: '#4c7a52',
+  green: '#4c7a52',
+  gris: '#8b8b8b',
+  gray: '#8b8b8b',
+  grey: '#8b8b8b',
+  beige: '#d9c4a3',
+  marron: '#8a5a34',
+  brown: '#8a5a34',
+  rosa: '#e8b4b4',
+  pink: '#e8b4b4',
+  naranja: '#e07020',
+  orange: '#e07020',
+  amarillo: '#e6c200',
+  yellow: '#e6c200',
+  dorado: '#c9a227',
+  plateado: '#a8a8a8',
+  cobre: '#b87333',
+};
+
+/** Claves ordenadas: frases largas antes que palabras cortas (evita que "azul" gane a "azul marino"). */
+const COLOR_NAME_KEYS_SORTED = Object.keys(COLOR_NAME_TO_HEX).sort((a, b) => b.length - a.length);
+
 function inferColorHex(name?: string): string | undefined {
   const n = normalizeToken(name);
   if (!n) return undefined;
-  const map: Record<string, string> = {
-    negro: '#111111',
-    black: '#111111',
-    blanco: '#f5f5f5',
-    white: '#f5f5f5',
-    azul: '#355c8c',
-    blue: '#355c8c',
-    rojo: '#a42d2d',
-    red: '#a42d2d',
-    verde: '#4c7a52',
-    green: '#4c7a52',
-    gris: '#8b8b8b',
-    gray: '#8b8b8b',
-    grey: '#8b8b8b',
-    beige: '#d9c4a3',
-    marron: '#8a5a34',
-    brown: '#8a5a34',
-  };
-  const hit = Object.entries(map).find(([key]) => n.includes(key));
-  return hit?.[1];
+
+  if (COLOR_NAME_TO_HEX[n]) return COLOR_NAME_TO_HEX[n];
+
+  for (const key of COLOR_NAME_KEYS_SORTED) {
+    const nk = normalizeToken(key);
+    if (nk && n.includes(nk)) return COLOR_NAME_TO_HEX[key];
+  }
+  return undefined;
 }
 
 function variantSize(variant: ProductVariant): string | undefined {
@@ -219,13 +281,14 @@ function variantColor(variant: ProductVariant): { key: string; name: string; hex
   const optionValOk = nameByOption?.value?.trim();
 
   const explicitName = (colorFieldOk || optionValOk || inferredFromName || '').trim();
+  const colorOnly = explicitName ? colorNameWithoutSizeTokens(explicitName) : '';
+  const namePart = colorOnly && !isLikelySize(colorOnly) ? colorOnly : '';
+
   const explicitHex =
     normalizeColorHex(variant.colorHex) ||
     normalizeColorHex(nameByOption?.swatch) ||
+    inferColorHex(namePart) ||
     inferColorHex(explicitName);
-
-  const colorOnly = explicitName ? colorNameWithoutSizeTokens(explicitName) : '';
-  const namePart = colorOnly && !isLikelySize(colorOnly) ? colorOnly : '';
 
   if (!namePart && !explicitHex) return null;
   const name = namePart || 'Color';

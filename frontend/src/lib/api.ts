@@ -40,6 +40,28 @@ function networkFetchErrorMessage(url: string, err: TypeError): string {
   );
 }
 
+const ADMIN_TOKEN_KEY = 'lupo_admin_token';
+
+function canUseStorage(): boolean {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+export function getAdminToken(): string | null {
+  if (!canUseStorage()) return null;
+  const token = window.localStorage.getItem(ADMIN_TOKEN_KEY)?.trim();
+  return token || null;
+}
+
+export function setAdminToken(token: string): void {
+  if (!canUseStorage()) return;
+  window.localStorage.setItem(ADMIN_TOKEN_KEY, token);
+}
+
+export function clearAdminToken(): void {
+  if (!canUseStorage()) return;
+  window.localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
 function apiErrorMessage(res: Response, bodyText: string): string {
   const ct = res.headers.get('content-type') || '';
   if (res.status === 404 || (!ct.includes('application/json') && bodyText.length > 0)) {
@@ -94,6 +116,43 @@ export async function fetchProducts(): Promise<Product[]> {
   return JSON.parse(text) as Product[];
 }
 
+export async function adminLogin(email: string, password: string): Promise<{
+  ok: boolean;
+  token?: string;
+  role?: string;
+  error?: string;
+}> {
+  const base = apiBase();
+  const loginUrl = base ? `${base}/api/auth/admin/login` : '/api/auth/admin/login';
+  let res: Response;
+  try {
+    res = await fetch(loginUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch (e) {
+    if (e instanceof TypeError) {
+      return { ok: false, error: networkFetchErrorMessage(loginUrl, e) };
+    }
+    throw e;
+  }
+
+  const text = await res.text();
+  let data: { token?: string; role?: string; error?: string } = {};
+  try {
+    data = JSON.parse(text) as typeof data;
+  } catch {
+    return { ok: false, error: apiErrorMessage(res, text) };
+  }
+  if (!res.ok || !data.token) {
+    return { ok: false, error: data.error || `HTTP ${res.status}` };
+  }
+
+  setAdminToken(data.token);
+  return { ok: true, token: data.token, role: data.role };
+}
+
 export async function importFromTiendaNube(): Promise<{
   ok: boolean;
   imported: number;
@@ -103,8 +162,8 @@ export async function importFromTiendaNube(): Promise<{
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  const key = import.meta.env.VITE_IMPORT_API_KEY?.trim();
-  if (key) headers['x-import-key'] = key;
+  const adminToken = getAdminToken();
+  if (adminToken) headers.Authorization = `Bearer ${adminToken}`;
 
   const base = apiBase();
   const importUrl = base ? `${base}/api/admin/import/tiendanube` : '/api/admin/import/tiendanube';
@@ -128,6 +187,9 @@ export async function importFromTiendaNube(): Promise<{
     return { ok: false, imported: 0, error: apiErrorMessage(res, text) };
   }
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      clearAdminToken();
+    }
     return { ok: false, imported: 0, error: data.error || `HTTP ${res.status}` };
   }
   return {

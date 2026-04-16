@@ -1,13 +1,44 @@
-import { useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Upload, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { useProductCatalog } from '../context/ProductCatalogContext';
-import { importFromTiendaNube } from '../lib/api';
+import { adminLogin, clearAdminToken, getAdminToken, importFromTiendaNube } from '../lib/api';
 
 export function Admin() {
   const { refetch, products } = useProductCatalog();
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [lastMessage, setLastMessage] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    setIsAuthenticated(Boolean(getAdminToken()));
+  }, []);
+
+  const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setAuthError(null);
+    setIsAuthLoading(true);
+    const res = await adminLogin(email, password);
+    setIsAuthLoading(false);
+    if (!res.ok) {
+      setAuthError(res.error ?? 'No se pudo iniciar sesión.');
+      return;
+    }
+    setIsAuthenticated(true);
+    setPassword('');
+  };
+
+  const handleLogout = () => {
+    clearAdminToken();
+    setIsAuthenticated(false);
+    setPassword('');
+    setImportStatus('idle');
+    setLastMessage(null);
+  };
 
   const handleImport = async () => {
     setIsImporting(true);
@@ -27,10 +58,78 @@ export function Admin() {
     }
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] max-w-xl mx-auto">
+        <h1 className="text-[40px] font-light tracking-[-1px] mb-4">Iniciar sesión</h1>
+        <p className="text-[16px] text-lupo-text mb-10">
+          Ingresá con tu cuenta de administrador para importar productos desde Tienda Nube.
+        </p>
+
+        <form onSubmit={handleLogin} className="bg-white border border-lupo-border p-8 space-y-5">
+          <div>
+            <label htmlFor="admin-email" className="block text-[12px] uppercase tracking-[1.5px] mb-2 font-medium">
+              Email
+            </label>
+            <input
+              id="admin-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              className="w-full border border-lupo-border px-4 py-3 text-[14px] outline-none focus:border-lupo-black"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="admin-password"
+              className="block text-[12px] uppercase tracking-[1.5px] mb-2 font-medium"
+            >
+              Contraseña
+            </label>
+            <input
+              id="admin-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              className="w-full border border-lupo-border px-4 py-3 text-[14px] outline-none focus:border-lupo-black"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isAuthLoading}
+            className={`w-full bg-lupo-black text-white px-[30px] py-[14px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors ${
+              isAuthLoading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-black/80'
+            }`}
+          >
+            {isAuthLoading ? 'Ingresando…' : 'Iniciar sesión'}
+          </button>
+
+          {authError && <p className="text-[13px] text-red-600 whitespace-pre-wrap">{authError}</p>}
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] max-w-4xl mx-auto">
-      <h1 className="text-[40px] font-light tracking-[-1px] mb-4">Administración</h1>
-      <p className="text-[16px] text-lupo-text mb-12">Gestiona tu catálogo y sincroniza tus productos.</p>
+      <div className="flex items-start justify-between gap-4 mb-12">
+        <div>
+          <h1 className="text-[40px] font-light tracking-[-1px] mb-4">Administración</h1>
+          <p className="text-[16px] text-lupo-text">Gestiona tu catálogo y sincroniza tus productos.</p>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="text-[11px] uppercase tracking-[1.8px] border border-lupo-border px-4 py-2 hover:bg-black hover:text-white transition-colors"
+        >
+          Cerrar sesión
+        </button>
+      </div>
 
       <div className="bg-white border border-lupo-border p-8">
         <h2 className="text-[18px] font-medium mb-6 text-lupo-black flex items-center gap-2">

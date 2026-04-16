@@ -12,9 +12,9 @@ import { authRouter } from './routes/authRoutes.js';
 import { orderRouter } from './routes/orderRoutes.js';
 import { adminRouter } from './routes/adminRoutes.js';
 import { hubRouter } from './routes/hubRoutes.js';
+import { requireAdmin } from './middleware/auth.js';
 
 const PORT = Number(process.env.PORT) || 4000;
-const IMPORT_API_KEY = process.env.IMPORT_API_KEY?.trim();
 const TN_STORE_ID = process.env.TIENDANUBE_STORE_ID?.trim();
 const TN_TOKEN = process.env.TIENDANUBE_ACCESS_TOKEN?.trim();
 const TN_USER_AGENT = process.env.TIENDANUBE_USER_AGENT?.trim();
@@ -25,16 +25,10 @@ app.use(
   cors({
     origin: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-import-key', 'x-hub-api-key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-hub-api-key'],
   })
 );
 app.use(express.json());
-
-function assertImportKey(req: express.Request): boolean {
-  if (!IMPORT_API_KEY) return true;
-  const key = req.header('x-import-key');
-  return key === IMPORT_API_KEY;
-}
 
 function publicProduct(p: Product) {
   return {
@@ -69,12 +63,7 @@ app.get('/api/products', async (_req, res) => {
   }
 });
 
-app.post('/api/admin/import/tiendanube', async (req, res) => {
-  if (!assertImportKey(req)) {
-    res.status(401).json({ error: 'Clave de importación inválida.' });
-    return;
-  }
-
+app.post('/api/admin/import/tiendanube', requireAdmin, async (_req, res) => {
   if (!TN_STORE_ID || !TN_TOKEN || !TN_USER_AGENT) {
     res.status(400).json({
       error:

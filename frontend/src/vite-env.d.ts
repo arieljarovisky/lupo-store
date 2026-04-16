@@ -3,8 +3,6 @@
 interface ImportMetaEnv {
   /** URL base del API (sin /api). Vacío = mismo origen. */
   readonly VITE_API_URL?: string;
-  /** Envío al backend en header x-import-key al importar desde Tienda Nube. */
-  readonly VITE_IMPORT_API_KEY?: string;
   /** OAuth Google: mismo Client ID que en el backend. */
   readonly VITE_GOOGLE_CLIENT_ID?: string;
 }

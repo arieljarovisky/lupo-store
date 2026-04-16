@@ -1,6 +1,27 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import { getPool } from '../pool.js';
-import type { Product, ProductSyncSource } from '../types.js';
+import type { Product, ProductSyncSource, ProductVariant } from '../types.js';
+
+function parseVariants(raw: unknown): ProductVariant[] | undefined {
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const list = parsed
+      .filter((v): v is Record<string, unknown> => Boolean(v && typeof v === 'object'))
+      .map((v) => ({
+        id: String(v.id ?? ''),
+        name: String(v.name ?? ''),
+        price: Number(v.price ?? 0),
+        stockQuantity: Number(v.stockQuantity ?? 0),
+        sku: v.sku != null ? String(v.sku) : undefined,
+      }))
+      .filter((v) => v.id && v.name);
+    return list.length > 0 ? list : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function rowToProduct(row: RowDataPacket): Product {
   const sync = String(row.sync_source ?? 'manual');
@@ -27,6 +48,7 @@ function rowToProduct(row: RowDataPacket): Product {
     hubSyncedAt: row.hub_synced_at
       ? new Date(String(row.hub_synced_at)).toISOString()
       : null,
+    variants: parseVariants(row.variants_json),
   };
 }
 
@@ -34,7 +56,7 @@ export async function listProducts(): Promise<Product[]> {
   const p = await getPool();
   const [rows] = await p.query<RowDataPacket[]>(
     `SELECT id, sku, name, price, stock_quantity, image, category, description,
-            external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at
+            external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
      FROM products ORDER BY name`
   );
   return rows.map(rowToProduct);
@@ -44,7 +66,7 @@ export async function getProductById(id: string): Promise<Product | null> {
   const p = await getPool();
   const [rows] = await p.query<RowDataPacket[]>(
     `SELECT id, sku, name, price, stock_quantity, image, category, description,
-            external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at
+            external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
      FROM products WHERE id = ? LIMIT 1`,
     [id]
   );
@@ -60,8 +82,8 @@ export async function replaceAllProducts(products: Product[]): Promise<void> {
     await conn.query('DELETE FROM products');
     const sql = `INSERT INTO products (
       id, sku, name, price, stock_quantity, image, category, description,
-      external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     for (const row of products) {
       await conn.query(sql, [
         row.id,
@@ -78,6 +100,7 @@ export async function replaceAllProducts(products: Product[]): Promise<void> {
         row.source ?? 'local',
         row.syncSource ?? 'manual',
         row.hubSyncedAt ? new Date(row.hubSyncedAt) : null,
+        row.variants?.length ? JSON.stringify(row.variants) : null,
       ]);
     }
     await conn.commit();
@@ -112,8 +135,8 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
     const sql = `
       INSERT INTO products (
         id, sku, name, price, stock_quantity, image, category, description,
-        external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', 'lupo_hub', NOW())
+        external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', 'lupo_hub', NOW(), ?)
       ON DUPLICATE KEY UPDATE
         sku = COALESCE(VALUES(sku), sku),
         name = COALESCE(VALUES(name), name),
@@ -124,6 +147,7 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
         description = COALESCE(VALUES(description), description),
         external_tn_id = COALESCE(VALUES(external_tn_id), external_tn_id),
         external_ml_id = COALESCE(VALUES(external_ml_id), external_ml_id),
+        variants_json = COALESCE(VALUES(variants_json), variants_json),
         sync_source = 'lupo_hub',
         hub_synced_at = NOW()
     `;
@@ -131,7 +155,7 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
     for (const it of items) {
       const [exRows] = await conn.query<RowDataPacket[]>(
         `SELECT id, sku, name, price, stock_quantity, image, category, description,
-                external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at
+                external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
          FROM products WHERE id = ? LIMIT 1`,
         [it.id]
       );
@@ -148,6 +172,7 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
         existing?.externalId ?? String(it.id),
         it.external_tn_id ?? existing?.externalTnId ?? null,
         it.external_ml_id ?? existing?.externalMlId ?? null,
+        existing?.variants?.length ? JSON.stringify(existing.variants) : null,
       ]);
       n += 1;
     }

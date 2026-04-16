@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ProductCard } from '../components/ProductCard';
 import { useCart } from '../context/CartContext';
@@ -10,6 +11,29 @@ export function ProductDetail() {
 
   const productId = decodeURIComponent(id ?? '');
   const product = products.find((p) => p.id === productId);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!product?.variants?.length) {
+      setSelectedVariantId(null);
+      return;
+    }
+    setSelectedVariantId(product.variants[0].id);
+  }, [productId, product?.variants]);
+
+  const selectedVariant = useMemo(() => {
+    if (!product?.variants?.length) return null;
+    return (
+      product.variants.find((v) => v.id === selectedVariantId) ??
+      product.variants[0] ??
+      null
+    );
+  }, [product?.variants, selectedVariantId]);
+
+  const displayPrice = selectedVariant?.price ?? product?.price ?? 0;
+  const displayStock = selectedVariant?.stockQuantity ?? product?.stockQuantity;
+  const displaySku = selectedVariant?.sku ?? product?.sku;
+
   const related = products
     .filter((p) => p.id !== productId && p.category === product?.category)
     .slice(0, 4);
@@ -51,11 +75,11 @@ export function ProductDetail() {
   return (
     <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px]">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
-        <div className="aspect-[3/4] bg-[#F0F0F0] border border-[#EEE] overflow-hidden">
+        <div className="bg-[#F0F0F0] border border-[#EEE] overflow-hidden max-w-[560px] max-h-[700px] w-full">
           <img
             src={product.image || 'https://placehold.co/800x1000/f0f0f0/666?text=Sin+imagen'}
             alt={product.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
           />
         </div>
 
@@ -64,20 +88,44 @@ export function ProductDetail() {
           <h1 className="text-[36px] md:text-[46px] font-light tracking-[-1px] leading-[1.1] mb-5">
             {product.name}
           </h1>
-          <p className="text-[26px] font-medium text-lupo-black mb-6">${product.price.toFixed(2)}</p>
-          <p className="text-[15px] text-lupo-text leading-[1.7] mb-8">
+          <p className="text-[26px] font-medium text-lupo-black mb-6">${displayPrice.toFixed(2)}</p>
+          <p className="text-[15px] text-lupo-text leading-[1.85] whitespace-pre-line mb-8 max-w-[640px]">
             {product.description?.trim() || 'Sin descripción disponible para este producto.'}
           </p>
 
+          {product.variants && product.variants.length > 0 && (
+            <div className="mb-8">
+              <p className="text-[12px] uppercase tracking-[1.5px] font-medium mb-3 text-lupo-black">Variantes</p>
+              <div className="flex flex-wrap gap-2">
+                {product.variants.map((variant) => {
+                  const isSelected = variant.id === selectedVariant?.id;
+                  return (
+                    <button
+                      key={variant.id}
+                      onClick={() => setSelectedVariantId(variant.id)}
+                      className={`px-4 py-2 text-[12px] border transition-colors ${
+                        isSelected
+                          ? 'bg-lupo-black text-white border-lupo-black'
+                          : 'bg-white text-lupo-black border-lupo-border hover:border-lupo-black'
+                      }`}
+                    >
+                      {variant.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3 mb-8 text-[13px] text-lupo-text">
-            {product.sku && (
+            {displaySku && (
               <p>
-                <span className="font-medium text-lupo-black">SKU:</span> {product.sku}
+                <span className="font-medium text-lupo-black">SKU:</span> {displaySku}
               </p>
             )}
-            {typeof product.stockQuantity === 'number' && (
+            {typeof displayStock === 'number' && (
               <p>
-                <span className="font-medium text-lupo-black">Stock:</span> {product.stockQuantity}
+                <span className="font-medium text-lupo-black">Stock:</span> {displayStock}
               </p>
             )}
           </div>

@@ -9,6 +9,13 @@ export interface Product {
   description?: string;
   sku?: string;
   stockQuantity?: number;
+  variants?: Array<{
+    id: string;
+    name: string;
+    price: number;
+    stockQuantity: number;
+    sku?: string;
+  }>;
 }
 
 export interface CartItem extends Product {

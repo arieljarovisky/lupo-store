@@ -1,5 +1,13 @@
 export type ProductSyncSource = 'manual' | 'tiendanube' | 'lupo_hub' | 'mercadolibre';
 
+export interface ProductVariant {
+  id: string;
+  name: string;
+  price: number;
+  stockQuantity: number;
+  sku?: string;
+}
+
 export interface Product {
   id: string;
   sku?: string;
@@ -17,6 +25,7 @@ export interface Product {
   source?: 'tiendanube' | 'local';
   syncSource?: ProductSyncSource;
   hubSyncedAt?: string | null;
+  variants?: ProductVariant[];
 }
 
 export interface Customer {

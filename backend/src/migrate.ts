@@ -166,6 +166,12 @@ export async function runMigrations(p: Pool): Promise<void> {
     'updated_at',
     '`updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
   );
+  await addColumn(
+    p,
+    'products',
+    'variants_json',
+    '`variants_json` LONGTEXT DEFAULT NULL'
+  );
 
   await p.query(
     'CREATE INDEX idx_products_sku ON products (sku)'

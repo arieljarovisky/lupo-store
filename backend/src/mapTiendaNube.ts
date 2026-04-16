@@ -160,7 +160,10 @@ function buildVariantDisplayName(
 function isLikelySize(value: string): boolean {
   const v = value.trim().toUpperCase();
   if (!v) return false;
-  if (/^(XXS|XS|S|M|L|XL|XXL|XXXL|XXG|XG|G|EG|GG|XGG|U|UNI|UNICO|ÚNICO|Única|UNICA)$/.test(v)) return true;
+  if (
+    /^(XXS|XS|S|M|L|XL|XXL|XXXL|XXG|XG|G|EG|GG|XGG|P|PP|CH|RM|RG|2XL|3XL|U|UNI|UNICO|ÚNICO|Única|UNICA)$/.test(v)
+  )
+    return true;
   if (/^\d{2,3}$/.test(v)) return true;
   if (/^\d+\s*-\s*\d+$/.test(v)) return true;
   return /(TALLE|TALLA|SIZE)/i.test(value);
@@ -202,7 +205,8 @@ function inferVariantDetails(optionValues: Array<{ name: string; value: string; 
     if (!colorHex && (hexFromVal || hexFromSw)) {
       colorHex = hexFromVal || hexFromSw;
     }
-    if (!colorName && (name.includes('color') || isColorName(val))) {
+    // TN a veces etiqueta mal la opción (ej. "Color" con valor "P" = talle pequeño).
+    if (!colorName && !isLikelySize(val) && (name.includes('color') || isColorName(val))) {
       colorName = val;
     }
   }

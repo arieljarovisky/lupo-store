@@ -116,7 +116,11 @@ function normalizeToken(value?: string): string {
 function isLikelySize(value?: string): boolean {
   const v = normalizeToken(value);
   if (!v) return false;
-  return /^(xxs|xs|s|m|l|xl|xxl|xxxl|xxg|xg|g|eg|gg|xgg|u|uni|unico|unica)$/.test(v) || /^\d{2,3}$/.test(v);
+  // P / PP = pequeño (muy usado en ropa interior Lupo); CH = chico; 2XL/3XL
+  return (
+    /^(xxs|xs|s|m|l|xl|xxl|xxxl|xxg|xg|g|eg|gg|xgg|p|pp|ch|rm|rg|2xl|3xl|u|uni|unico|unica)$/.test(v) ||
+    /^\d{2,3}$/.test(v)
+  );
 }
 
 function isLikelySku(value?: string): boolean {
@@ -194,31 +198,40 @@ function variantSize(variant: ProductVariant): string | undefined {
   if (variant.size?.trim()) return variant.size.trim();
   const byOption = variant.optionValues?.find((ov) =>
     /(talle|talla|size)/i.test(ov.name) ||
-    /^(XXS|XS|S|M|L|XL|XXL|XXXL|XXG|XG|G|EG|GG|XGG|\d{2,3})$/i.test(ov.value.trim())
+    /^(XXS|XS|S|M|L|XL|XXL|XXXL|XXG|XG|G|EG|GG|XGG|P|PP|CH|2XL|3XL|\d{2,3})$/i.test(ov.value.trim())
   );
   return byOption?.value?.trim() || undefined;
 }
 
 function variantColor(variant: ProductVariant): { key: string; name: string; hex?: string } | null {
-  const nameByOption = variant.optionValues?.find((ov) =>
-    /color/i.test(ov.name) ||
-    /(negro|blanco|azul|rojo|verde|gris|beige|marr[oó]n|brown|black|white|blue|red|green|gray|grey|pink)/i.test(
-      ov.value
-    )
-  );
   const inferredFromName = extractColorFromVariantName(variant);
-  const explicitName = variant.colorName?.trim() || nameByOption?.value?.trim() || inferredFromName;
+  const colorField = variant.colorName?.trim();
+  const colorFieldOk = colorField && !isLikelySize(colorField) ? colorField : undefined;
+
+  const nameByOption = variant.optionValues?.find((ov) => {
+    const val = ov.value?.trim() || '';
+    if (!val || isLikelySize(val)) return false;
+    if (/color/i.test(ov.name)) return true;
+    return /(negro|blanco|azul|rojo|verde|gris|beige|marr[oó]n|brown|black|white|blue|red|green|gray|grey|pink)/i.test(
+      val
+    );
+  });
+  const optionValOk = nameByOption?.value?.trim();
+
+  const explicitName = (colorFieldOk || optionValOk || inferredFromName || '').trim();
   const explicitHex =
     normalizeColorHex(variant.colorHex) ||
     normalizeColorHex(nameByOption?.swatch) ||
     inferColorHex(explicitName);
 
-  if (!explicitName && !explicitHex) return null;
   const colorOnly = explicitName ? colorNameWithoutSizeTokens(explicitName) : '';
-  const label = colorOnly || explicitHex || 'Color';
+  const namePart = colorOnly && !isLikelySize(colorOnly) ? colorOnly : '';
+
+  if (!namePart && !explicitHex) return null;
+  const name = namePart || 'Color';
   return {
-    key: normalizeToken(colorOnly || explicitHex || ''),
-    name: label,
+    key: normalizeToken(namePart || explicitHex || name),
+    name,
     hex: explicitHex,
   };
 }

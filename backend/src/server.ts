@@ -16,8 +16,8 @@ import { tiendanubePrivacyRouter } from './routes/tiendanubePrivacyRoutes.js';
 import { requireAdmin } from './middleware/auth.js';
 import {
   buildTiendaNubeAuthorizeUrl,
-  createTiendaNubeOAuthState,
-  assertValidTiendaNubeOAuthState,
+  createTiendaNubeOAuthStateWithReturn,
+  parseTiendaNubeOAuthState,
   exchangeTiendaNubeAuthorizationCode,
 } from './tiendanubeOAuth.js';
 import {
@@ -102,9 +102,10 @@ app.get('/api/admin/tiendanube/status', requireAdmin, async (_req, res) => {
   }
 });
 
-app.post('/api/admin/tiendanube/oauth/start', requireAdmin, async (_req, res) => {
+app.post('/api/admin/tiendanube/oauth/start', requireAdmin, async (req, res) => {
   try {
-    const state = createTiendaNubeOAuthState();
+    const dashboardUrl = String(req.body?.dashboardUrl ?? '').trim();
+    const state = createTiendaNubeOAuthStateWithReturn(dashboardUrl || undefined);
     const url = buildTiendaNubeAuthorizeUrl(state);
     res.json({ url });
   } catch (e) {
@@ -114,7 +115,7 @@ app.post('/api/admin/tiendanube/oauth/start', requireAdmin, async (_req, res) =>
 });
 
 app.get('/api/admin/tiendanube/oauth/callback', async (req, res) => {
-  const backToAdmin = adminDashboardUrl(req);
+  let backToAdmin = adminDashboardUrl(req);
   try {
     const code = String(req.query.code ?? '').trim();
     const state = String(req.query.state ?? '').trim();
@@ -122,7 +123,10 @@ app.get('/api/admin/tiendanube/oauth/callback', async (req, res) => {
       res.redirect(`${backToAdmin}?tn_oauth=error&message=${encodeURIComponent('Faltan code/state.')}`);
       return;
     }
-    assertValidTiendaNubeOAuthState(state);
+    const parsedState = parseTiendaNubeOAuthState(state);
+    if (parsedState.returnTo) {
+      backToAdmin = parsedState.returnTo;
+    }
     const oauth = await exchangeTiendaNubeAuthorizationCode(code);
     await upsertTiendaNubeIntegration({
       storeId: oauth.storeId,

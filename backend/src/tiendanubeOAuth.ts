@@ -7,6 +7,7 @@ interface OAuthStatePayload {
   typ: 'tn_oauth_state';
   nonce: string;
   iat: number;
+  returnTo?: string;
 }
 
 function stateSecret(): string {
@@ -46,15 +47,37 @@ function verifyState(raw: string): OAuthStatePayload {
 }
 
 export function createTiendaNubeOAuthState(): string {
+  return createTiendaNubeOAuthStateWithReturn();
+}
+
+function sanitizeReturnTo(raw?: string): string | undefined {
+  const v = raw?.trim();
+  if (!v) return undefined;
+  try {
+    const u = new URL(v);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return undefined;
+    return u.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+export function createTiendaNubeOAuthStateWithReturn(returnTo?: string): string {
   return signState({
     typ: 'tn_oauth_state',
     nonce: crypto.randomBytes(12).toString('hex'),
     iat: Math.floor(Date.now() / 1000),
+    returnTo: sanitizeReturnTo(returnTo),
   });
 }
 
 export function assertValidTiendaNubeOAuthState(state: string): void {
   verifyState(state);
+}
+
+export function parseTiendaNubeOAuthState(state: string): { returnTo?: string } {
+  const payload = verifyState(state);
+  return payload.returnTo ? { returnTo: payload.returnTo } : {};
 }
 
 export function resolveTiendaNubeOAuthConfig(): {

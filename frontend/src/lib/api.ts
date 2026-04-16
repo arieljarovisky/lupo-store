@@ -217,8 +217,14 @@ export async function getTiendaNubeConnectionStatus(): Promise<{
 export async function startTiendaNubeOAuth(): Promise<{ ok: boolean; url?: string; error?: string }> {
   const base = apiBase();
   const url = base ? `${base}/api/admin/tiendanube/oauth/start` : '/api/admin/tiendanube/oauth/start';
+  const dashboardUrl =
+    typeof window !== 'undefined' ? `${window.location.origin.replace(/\/$/, '')}/admin` : undefined;
   try {
-    const res = await fetch(url, { method: 'POST', headers: adminAuthHeaders() });
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: adminAuthHeaders(),
+      body: JSON.stringify({ dashboardUrl }),
+    });
     const text = await res.text();
     const data = JSON.parse(text) as { url?: string; error?: string };
     if (!res.ok || !data.url) {

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ProductCard } from '../components/ProductCard';
 import { useCart } from '../context/CartContext';
 import { useProductCatalog } from '../context/ProductCatalogContext';
+import type { Product } from '../context/CartContext';
 
 function escapeHtml(s: string): string {
   return s
@@ -88,7 +89,9 @@ function normalizeColorHex(value?: string): string | undefined {
   return undefined;
 }
 
-function variantSize(variant: NonNullable<ReturnType<typeof useProductCatalog>['products'][number]['variants']>[number]): string | undefined {
+type ProductVariant = NonNullable<Product['variants']>[number];
+
+function variantSize(variant: ProductVariant): string | undefined {
   if (variant.size?.trim()) return variant.size.trim();
   const byOption = variant.optionValues?.find((ov) =>
     /(talle|talla|size)/i.test(ov.name) || /^(XXS|XS|S|M|L|XL|XXL|XXXL|\d{2,3})$/i.test(ov.value.trim())
@@ -96,9 +99,7 @@ function variantSize(variant: NonNullable<ReturnType<typeof useProductCatalog>['
   return byOption?.value?.trim() || undefined;
 }
 
-function variantColor(
-  variant: NonNullable<ReturnType<typeof useProductCatalog>['products'][number]['variants']>[number]
-): { key: string; name: string; hex?: string } | null {
+function variantColor(variant: ProductVariant): { key: string; name: string; hex?: string } | null {
   const nameByOption = variant.optionValues?.find((ov) =>
     /color/i.test(ov.name) ||
     /(negro|blanco|azul|rojo|verde|gris|beige|brown|black|white|blue|red|green|gray|grey|pink)/i.test(
@@ -196,6 +197,8 @@ export function ProductDetail() {
   const displayPrice = selectedVariant?.price ?? product?.price ?? 0;
   const displayStock = selectedVariant?.stockQuantity ?? product?.stockQuantity;
   const displaySku = selectedVariant?.sku ?? product?.sku;
+  const selectedSizeLabel = selectedVariant ? variantSize(selectedVariant) : null;
+  const selectedColorLabel = selectedVariant ? variantColor(selectedVariant)?.name ?? null : null;
   const richDescription = useMemo(() => {
     const d = product?.description?.trim();
     if (!d) return '';
@@ -395,6 +398,16 @@ export function ProductDetail() {
           )}
 
           <div className="space-y-3 mb-8 text-[13px] text-lupo-text">
+            {selectedSizeLabel && (
+              <p>
+                <span className="font-medium text-lupo-black">Talle:</span> {selectedSizeLabel}
+              </p>
+            )}
+            {selectedColorLabel && (
+              <p>
+                <span className="font-medium text-lupo-black">Color:</span> {selectedColorLabel}
+              </p>
+            )}
             {displaySku && (
               <p>
                 <span className="font-medium text-lupo-black">SKU:</span> {displaySku}
@@ -409,7 +422,16 @@ export function ProductDetail() {
 
           <div className="flex flex-wrap gap-3">
             <button
-              onClick={() => addToCart(product)}
+              onClick={() => {
+                const suffix = [selectedSizeLabel, selectedColorLabel].filter(Boolean).join(' / ');
+                addToCart({
+                  ...product,
+                  name: suffix ? `${product.name} - ${suffix}` : product.name,
+                  price: displayPrice,
+                  sku: displaySku,
+                  image: selectedVariant?.image || selectedImage || product.image,
+                });
+              }}
               className="bg-lupo-black text-white px-[32px] py-[14px] uppercase text-[11px] tracking-[2px] font-semibold hover:bg-black/80 transition-colors"
             >
               Agregar al carrito

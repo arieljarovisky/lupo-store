@@ -1,5 +1,15 @@
 import type { Product, ProductVariant } from './types.js';
 
+interface VariantOptionValueInfo {
+  name?: string;
+  swatch?: string;
+}
+
+interface VariantOptionCatalog {
+  optionNamesById: Map<string, string>;
+  valuesById: Map<string, VariantOptionValueInfo>;
+}
+
 function pickLocalized(val: unknown): string {
   if (typeof val === 'string') return val.trim();
   if (val && typeof val === 'object') {
@@ -33,6 +43,44 @@ function normalizeDescriptionHtml(input: unknown): string | undefined {
     .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
     .replace(/\sjavascript:/gi, ' ');
   return cleaned.trim() || undefined;
+}
+
+function buildOptionCatalog(raw: Record<string, unknown>): VariantOptionCatalog {
+  const optionNamesById = new Map<string, string>();
+  const valuesById = new Map<string, VariantOptionValueInfo>();
+
+  const optionSources: unknown[] = [];
+  for (const key of ['attributes', 'options', 'variants_attributes', 'product_options'] as const) {
+    optionSources.push(raw[key]);
+  }
+  for (const src of optionSources) {
+    if (!Array.isArray(src)) continue;
+    for (const item of src) {
+      if (!item || typeof item !== 'object') continue;
+      const opt = item as Record<string, unknown>;
+      const optionId = String(opt.id ?? '').trim();
+      const optionName = pickLocalized(opt.name) || pickLocalized(opt.label);
+      if (optionId && optionName) optionNamesById.set(optionId, optionName);
+
+      const valSource = Array.isArray(opt.values)
+        ? opt.values
+        : Array.isArray(opt.options)
+          ? opt.options
+          : [];
+      for (const val of valSource) {
+        if (!val || typeof val !== 'object') continue;
+        const v = val as Record<string, unknown>;
+        const valueId = String(v.id ?? v.value_id ?? '').trim();
+        if (!valueId) continue;
+        const valueName = pickLocalized(v.name) || pickLocalized(v.value) || pickLocalized(v.label);
+        const swatch =
+          pickLocalized(v.html_color) || pickLocalized(v.color) || pickLocalized(v.rgb) || undefined;
+        valuesById.set(valueId, { name: valueName || undefined, swatch });
+      }
+    }
+  }
+
+  return { optionNamesById, valuesById };
 }
 
 function valuesFromVariant(raw: Record<string, unknown>): string[] {
@@ -165,22 +213,36 @@ function mapProductImages(rawImages: Record<string, unknown>[]): {
   return { urls: [...new Set(urls)], byId };
 }
 
-function optionValuesFromVariant(raw: Record<string, unknown>): Array<{ name: string; value: string; swatch?: string }> {
+function optionValuesFromVariant(
+  raw: Record<string, unknown>,
+  catalog: VariantOptionCatalog
+): Array<{ name: string; value: string; swatch?: string }> {
   const out: Array<{ name: string; value: string; swatch?: string }> = [];
   const vals = raw.values;
   if (Array.isArray(vals)) {
     vals.forEach((v, idx) => {
       if (typeof v === 'string') {
-        const value = v.trim();
-        if (value) out.push({ name: `Opción ${idx + 1}`, value });
+        const valueId = v.trim();
+        if (!valueId) return;
+        const resolved = catalog.valuesById.get(valueId);
+        const value = resolved?.name || valueId;
+        const optionId = String(raw[`attribute${idx + 1}`] ?? '').trim();
+        const name = catalog.optionNamesById.get(optionId) || `Opción ${idx + 1}`;
+        out.push({ name, value, swatch: resolved?.swatch });
         return;
       }
       if (v && typeof v === 'object') {
         const o = v as Record<string, unknown>;
-        const name = pickLocalized(o.name) || pickLocalized(o.attribute) || `Opción ${idx + 1}`;
-        const value = pickLocalized(o.value) || pickLocalized(o.label) || '';
+        const valId = String(o.id ?? o.value_id ?? '').trim();
+        const resolved = valId ? catalog.valuesById.get(valId) : undefined;
+        const name =
+          pickLocalized(o.name) ||
+          pickLocalized(o.attribute) ||
+          catalog.optionNamesById.get(String(o.attribute_id ?? '').trim()) ||
+          `Opción ${idx + 1}`;
+        const value = pickLocalized(o.value) || pickLocalized(o.label) || resolved?.name || '';
         const swatchRaw =
-          pickLocalized(o.html_color) || pickLocalized(o.color) || pickLocalized(o.rgb);
+          pickLocalized(o.html_color) || pickLocalized(o.color) || pickLocalized(o.rgb) || resolved?.swatch;
         if (name.trim() && value.trim()) {
           out.push({
             name: name.trim(),
@@ -192,8 +254,10 @@ function optionValuesFromVariant(raw: Record<string, unknown>): Array<{ name: st
     });
   } else if (vals && typeof vals === 'object') {
     Object.entries(vals as Record<string, unknown>).forEach(([k, v]) => {
-      const value = pickLocalized(v);
-      if (value) out.push({ name: k, value });
+      const key = String(k).trim();
+      const resolved = catalog.valuesById.get(key);
+      const value = pickLocalized(v) || resolved?.name || key;
+      if (value) out.push({ name: k, value, swatch: resolved?.swatch });
     });
   }
   for (const i of [1, 2, 3] as const) {
@@ -205,7 +269,11 @@ function optionValuesFromVariant(raw: Record<string, unknown>): Array<{ name: st
   return out;
 }
 
-function mapVariants(rawVariants: Record<string, unknown>[], imagesById: Map<string, string>): ProductVariant[] {
+function mapVariants(
+  rawVariants: Record<string, unknown>[],
+  imagesById: Map<string, string>,
+  catalog: VariantOptionCatalog
+): ProductVariant[] {
   const mapped: Array<ProductVariant | null> = rawVariants.map((v) => {
       const id = String(v.id ?? '').trim();
       if (!id) return null;
@@ -213,7 +281,7 @@ function mapVariants(rawVariants: Record<string, unknown>[], imagesById: Map<str
       const stockNum = Number.parseInt(String(v.stock ?? '0'), 10);
       const price = Number.isNaN(priceNum) ? 0 : Math.round(priceNum);
       const stockQuantity = Number.isNaN(stockNum) ? 0 : Math.max(0, stockNum);
-      const optionValues = optionValuesFromVariant(v);
+      const optionValues = optionValuesFromVariant(v, catalog);
       const inferred = inferVariantDetails(optionValues);
       const imageId = String(v.image_id ?? v.imageId ?? '').trim();
       const imageFromId = imageId ? imagesById.get(imageId) : undefined;
@@ -251,7 +319,8 @@ export function mapTiendaNubeProduct(raw: Record<string, unknown>): Product | nu
   const variants = Array.isArray(raw.variants) ? (raw.variants as Record<string, unknown>[]) : [];
   const images = Array.isArray(raw.images) ? (raw.images as Record<string, unknown>[]) : [];
   const mappedImages = mapProductImages(images);
-  const mappedVariants = mapVariants(variants, mappedImages.byId);
+  const optionCatalog = buildOptionCatalog(raw);
+  const mappedVariants = mapVariants(variants, mappedImages.byId, optionCatalog);
   const firstVariant = mappedVariants[0];
   let price = 0;
   if (firstVariant?.price != null) price = firstVariant.price;

@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
 import type { Pool } from 'mysql2/promise';
 import { ensureDatabaseExists } from './ensureDatabase.js';
-import { resolveMysqlConnectionConfig } from './mysqlConfig.js';
+import { mysqlSslOptionsForHost, resolveMysqlConnectionConfig } from './mysqlConfig.js';
 
 let pool: Pool | null = null;
 let bootstrapped = false;
@@ -25,7 +25,7 @@ export async function getPool(): Promise<Pool> {
     waitForConnections: true,
     connectionLimit: 10,
     enableKeepAlive: true,
-    ssl: cfg.useSsl ? {} : undefined,
+    ssl: mysqlSslOptionsForHost(cfg.host),
   });
 
   return pool;

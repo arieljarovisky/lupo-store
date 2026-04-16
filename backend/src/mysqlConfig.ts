@@ -95,3 +95,36 @@ export function resolveMysqlConnectionConfig(): MysqlConnectionConfig {
     useSsl: inferSsl(host),
   };
 }
+
+function sslRejectConfig(): { rejectUnauthorized: boolean } {
+  const strict = process.env.MYSQL_SSL_REJECT_UNAUTHORIZED?.trim()?.toLowerCase();
+  if (strict === 'true' || strict === '1') {
+    return { rejectUnauthorized: true };
+  }
+  return { rejectUnauthorized: false };
+}
+
+function isLocalHost(host: string): boolean {
+  return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+}
+
+/**
+ * TLS para mysql2. En hosts remotos (p. ej. proxy de Railway) el servidor puede forzar TLS aunque
+ * `useSsl` sea false por variables no definidas en el contenedor; sin `rejectUnauthorized: false`
+ * aparece "self-signed certificate in certificate chain".
+ */
+export function mysqlSslOptionsForHost(host: string): { rejectUnauthorized: boolean } | undefined {
+  const ms = process.env.MYSQL_SSL?.trim()?.toLowerCase();
+  if (ms === '0' || ms === 'false') {
+    return undefined;
+  }
+
+  if (isLocalHost(host)) {
+    if (ms === '1' || ms === 'true') {
+      return sslRejectConfig();
+    }
+    return undefined;
+  }
+
+  return sslRejectConfig();
+}

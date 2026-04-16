@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import type { MysqlConnectionConfig } from './mysqlConfig.js';
+import { mysqlSslOptionsForHost, type MysqlConnectionConfig } from './mysqlConfig.js';
 
 const SAFE_DB = /^[a-zA-Z0-9_]+$/;
 
@@ -23,7 +23,7 @@ export async function ensureDatabaseExists(cfg: MysqlConnectionConfig): Promise<
     port: cfg.port,
     user: cfg.user,
     password: cfg.password,
-    ssl: cfg.useSsl ? {} : undefined,
+    ssl: mysqlSslOptionsForHost(cfg.host),
   });
   try {
     await conn.query(

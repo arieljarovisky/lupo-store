@@ -50,6 +50,7 @@ function publicProduct(p: Product) {
     price: p.price,
     stockQuantity: p.stockQuantity,
     image: p.image,
+    images: p.images,
     category: p.category,
     description: p.description,
     variants: p.variants,

@@ -6,6 +6,15 @@ export interface ProductVariant {
   price: number;
   stockQuantity: number;
   sku?: string;
+  size?: string;
+  colorName?: string;
+  colorHex?: string;
+  image?: string;
+  optionValues?: Array<{
+    name: string;
+    value: string;
+    swatch?: string;
+  }>;
 }
 
 export interface Product {
@@ -26,6 +35,7 @@ export interface Product {
   syncSource?: ProductSyncSource;
   hubSyncedAt?: string | null;
   variants?: ProductVariant[];
+  images?: string[];
 }
 
 export interface Customer {

@@ -9,12 +9,22 @@ export interface Product {
   description?: string;
   sku?: string;
   stockQuantity?: number;
+  images?: string[];
   variants?: Array<{
     id: string;
     name: string;
     price: number;
     stockQuantity: number;
     sku?: string;
+    size?: string;
+    colorName?: string;
+    colorHex?: string;
+    image?: string;
+    optionValues?: Array<{
+      name: string;
+      value: string;
+      swatch?: string;
+    }>;
   }>;
 }
 

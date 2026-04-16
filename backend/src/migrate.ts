@@ -172,6 +172,12 @@ export async function runMigrations(p: Pool): Promise<void> {
     'variants_json',
     '`variants_json` LONGTEXT DEFAULT NULL'
   );
+  await addColumn(
+    p,
+    'products',
+    'images_json',
+    '`images_json` LONGTEXT DEFAULT NULL'
+  );
 
   await p.query(
     'CREATE INDEX idx_products_sku ON products (sku)'

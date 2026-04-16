@@ -2,6 +2,18 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { getPool } from '../pool.js';
 import type { Product, ProductSyncSource, ProductVariant } from '../types.js';
 
+function parseStringArray(raw: unknown): string[] | undefined {
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const list = parsed.map((x) => String(x ?? '').trim()).filter(Boolean);
+    return list.length > 0 ? list : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function parseVariants(raw: unknown): ProductVariant[] | undefined {
   if (typeof raw !== 'string' || !raw.trim()) return undefined;
   try {
@@ -15,6 +27,19 @@ function parseVariants(raw: unknown): ProductVariant[] | undefined {
         price: Number(v.price ?? 0),
         stockQuantity: Number(v.stockQuantity ?? 0),
         sku: v.sku != null ? String(v.sku) : undefined,
+        size: v.size != null ? String(v.size) : undefined,
+        colorName: v.colorName != null ? String(v.colorName) : undefined,
+        colorHex: v.colorHex != null ? String(v.colorHex) : undefined,
+        image: v.image != null ? String(v.image) : undefined,
+        optionValues: Array.isArray(v.optionValues)
+          ? (v.optionValues as Array<Record<string, unknown>>)
+              .map((it) => ({
+                name: String(it.name ?? '').trim(),
+                value: String(it.value ?? '').trim(),
+                swatch: it.swatch != null ? String(it.swatch).trim() : undefined,
+              }))
+              .filter((it) => it.name && it.value)
+          : undefined,
       }))
       .filter((v) => v.id && v.name);
     return list.length > 0 ? list : undefined;
@@ -49,6 +74,7 @@ function rowToProduct(row: RowDataPacket): Product {
       ? new Date(String(row.hub_synced_at)).toISOString()
       : null,
     variants: parseVariants(row.variants_json),
+    images: parseStringArray(row.images_json),
   };
 }
 
@@ -56,7 +82,7 @@ export async function listProducts(): Promise<Product[]> {
   const p = await getPool();
   const [rows] = await p.query<RowDataPacket[]>(
     `SELECT id, sku, name, price, stock_quantity, image, category, description,
-            external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
+            external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json, images_json
      FROM products ORDER BY name`
   );
   return rows.map(rowToProduct);
@@ -66,7 +92,7 @@ export async function getProductById(id: string): Promise<Product | null> {
   const p = await getPool();
   const [rows] = await p.query<RowDataPacket[]>(
     `SELECT id, sku, name, price, stock_quantity, image, category, description,
-            external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
+            external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json, images_json
      FROM products WHERE id = ? LIMIT 1`,
     [id]
   );
@@ -82,8 +108,8 @@ export async function replaceAllProducts(products: Product[]): Promise<void> {
     await conn.query('DELETE FROM products');
     const sql = `INSERT INTO products (
       id, sku, name, price, stock_quantity, image, category, description,
-      external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json, images_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     for (const row of products) {
       await conn.query(sql, [
         row.id,
@@ -101,6 +127,7 @@ export async function replaceAllProducts(products: Product[]): Promise<void> {
         row.syncSource ?? 'manual',
         row.hubSyncedAt ? new Date(row.hubSyncedAt) : null,
         row.variants?.length ? JSON.stringify(row.variants) : null,
+        row.images?.length ? JSON.stringify(row.images) : null,
       ]);
     }
     await conn.commit();
@@ -135,8 +162,8 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
     const sql = `
       INSERT INTO products (
         id, sku, name, price, stock_quantity, image, category, description,
-        external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', 'lupo_hub', NOW(), ?)
+        external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json, images_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', 'lupo_hub', NOW(), ?, ?)
       ON DUPLICATE KEY UPDATE
         sku = COALESCE(VALUES(sku), sku),
         name = COALESCE(VALUES(name), name),
@@ -148,6 +175,7 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
         external_tn_id = COALESCE(VALUES(external_tn_id), external_tn_id),
         external_ml_id = COALESCE(VALUES(external_ml_id), external_ml_id),
         variants_json = COALESCE(VALUES(variants_json), variants_json),
+        images_json = COALESCE(VALUES(images_json), images_json),
         sync_source = 'lupo_hub',
         hub_synced_at = NOW()
     `;
@@ -155,7 +183,7 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
     for (const it of items) {
       const [exRows] = await conn.query<RowDataPacket[]>(
         `SELECT id, sku, name, price, stock_quantity, image, category, description,
-                external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json
+                external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json, images_json
          FROM products WHERE id = ? LIMIT 1`,
         [it.id]
       );
@@ -173,6 +201,7 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
         it.external_tn_id ?? existing?.externalTnId ?? null,
         it.external_ml_id ?? existing?.externalMlId ?? null,
         existing?.variants?.length ? JSON.stringify(existing.variants) : null,
+        existing?.images?.length ? JSON.stringify(existing.images) : null,
       ]);
       n += 1;
     }

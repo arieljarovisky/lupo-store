@@ -1,24 +1,95 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronRight, ExternalLink, Search } from 'lucide-react';
 import { useProductCatalog } from '../../context/ProductCatalogContext';
+import type { Product } from '../../context/CartContext';
 import { parseLupoSku13 } from '../../lib/lupoSku';
+
+function stockClass(qty: number): string {
+  if (qty <= 0) return 'text-red-600 font-medium';
+  if (qty <= 5) return 'text-amber-700 font-medium';
+  return '';
+}
 
 export function AdminCatalog() {
   const { products, loading, error } = useProductCatalog();
   const [q, setQ] = useState('');
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return products;
-    return products.filter(
-      (p) =>
+    return products.filter((p) => {
+      const matchProduct =
         p.name.toLowerCase().includes(s) ||
         (p.sku && p.sku.toLowerCase().includes(s)) ||
         p.category.toLowerCase().includes(s) ||
-        p.id.toLowerCase().includes(s)
-    );
+        p.id.toLowerCase().includes(s);
+      const matchVariant = p.variants?.some(
+        (v) =>
+          v.id.toLowerCase().includes(s) ||
+          (v.sku && v.sku.toLowerCase().includes(s)) ||
+          v.name.toLowerCase().includes(s)
+      );
+      return matchProduct || matchVariant;
+    });
   }, [products, q]);
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const variantRows = (p: Product) => {
+    const list = p.variants;
+    if (!list?.length) return null;
+    return (
+      <tr className="bg-[#f8f8f8] border-b border-[#ececec]">
+        <td colSpan={8} className="p-0">
+          <div className="px-4 py-3 pl-12 border-t border-[#eee]">
+            <p className="text-[10px] uppercase tracking-wider text-[#888] mb-2">
+              Variantes ({list.length})
+            </p>
+            <div className="overflow-x-auto rounded border border-[#e8e8e8] bg-white">
+              <table className="w-full text-left text-[12px] min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-[#eee] bg-[#fafafa] text-[10px] uppercase tracking-wide text-[#666]">
+                    <th className="py-2 px-3 font-medium">ID TN</th>
+                    <th className="py-2 px-3 font-medium">SKU</th>
+                    <th className="py-2 px-3 font-medium">Descripción</th>
+                    <th className="py-2 px-3 font-medium text-right">Precio</th>
+                    <th className="py-2 px-3 font-medium text-right">Stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((v) => {
+                    const parts = parseLupoSku13(v.sku);
+                    return (
+                      <tr key={v.id} className="border-b border-[#f4f4f4] last:border-0 hover:bg-[#fafafa]">
+                        <td className="py-2 px-3 font-mono text-[11px] text-[#555] whitespace-nowrap">{v.id}</td>
+                        <td className="py-2 px-3 font-mono text-[11px]">{v.sku ?? '—'}</td>
+                        <td className="py-2 px-3">
+                          <span className="text-lupo-black">{v.name}</span>
+                          {parts && (
+                            <span className="block text-[10px] text-[#999] mt-0.5 font-mono">
+                              Art. {parts.article} · Talle {parts.size} · Color {parts.color}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-right tabular-nums">${v.price.toFixed(2)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">
+                          <span className={stockClass(v.stockQuantity ?? 0)}>{v.stockQuantity ?? 0}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -46,9 +117,10 @@ export function AdminCatalog() {
       {!loading && !error && (
         <div className="bg-white border border-[#e8e8e8] overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-[13px] min-w-[720px]">
+            <table className="w-full text-left text-[13px] min-w-[780px]">
               <thead>
                 <tr className="border-b border-[#eee] bg-[#fafafa] text-[11px] uppercase tracking-[1px] text-[#666]">
+                  <th className="py-3 px-2 font-medium w-[40px]" aria-label="Expandir variantes" />
                   <th className="py-3 px-4 font-medium w-[72px]">Img</th>
                   <th className="py-3 px-4 font-medium">Producto</th>
                   <th className="py-3 px-4 font-medium">SKU</th>
@@ -59,62 +131,72 @@ export function AdminCatalog() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
-                  <tr key={p.id} className="border-b border-[#f4f4f4] hover:bg-[#fafafa]">
-                    <td className="py-2 px-4">
-                      <img
-                        src={p.image || 'https://placehold.co/56x56/f0f0f0/999?text=·'}
-                        alt=""
-                        className="w-14 h-14 object-cover border border-[#eee]"
-                      />
-                    </td>
-                    <td className="py-3 px-4 max-w-[280px]">
-                      <p className="font-medium text-lupo-black line-clamp-2">{p.name}</p>
-                      <p className="text-[11px] text-[#999] font-mono truncate mt-0.5">{p.id}</p>
-                    </td>
-                    <td className="py-3 px-4 text-lupo-text">
-                      <span className="block">{p.sku ?? '—'}</span>
-                      {(() => {
-                        const parts = parseLupoSku13(p.sku);
-                        if (!parts) return null;
-                        return (
-                          <span className="block text-[10px] text-[#999] mt-0.5 font-mono">
-                            Art. {parts.article} · Talle {parts.size} · Color {parts.color}
-                          </span>
-                        );
-                      })()}
-                      {p.variants && p.variants.length > 1 && (
-                        <span className="block text-[10px] text-[#666] mt-0.5">
-                          {p.variants.length} variantes en catálogo
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-lupo-text">{p.category}</td>
-                    <td className="py-3 px-4 text-right tabular-nums">${p.price.toFixed(2)}</td>
-                    <td className="py-3 px-4 text-right tabular-nums">
-                      <span
-                        className={
-                          (p.stockQuantity ?? 0) <= 0
-                            ? 'text-red-600 font-medium'
-                            : (p.stockQuantity ?? 0) <= 5
-                              ? 'text-amber-700 font-medium'
-                              : ''
-                        }
-                      >
-                        {p.stockQuantity ?? 0}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <Link
-                        to={`/producto/${encodeURIComponent(p.id)}`}
-                        className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-lupo-black hover:underline"
-                      >
-                        Ver
-                        <ExternalLink size={12} />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((p) => {
+                  const hasVariants = Boolean(p.variants && p.variants.length > 0);
+                  const isOpen = expanded[p.id];
+                  return (
+                    <Fragment key={p.id}>
+                      <tr className="border-b border-[#f4f4f4] hover:bg-[#fafafa]">
+                        <td className="py-3 px-2 align-middle w-[40px]">
+                          {hasVariants ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(p.id)}
+                              className="p-1 rounded hover:bg-[#eee] text-[#666] focus:outline-none focus:ring-1 focus:ring-lupo-black"
+                              aria-expanded={isOpen}
+                              title={isOpen ? 'Ocultar variantes' : 'Ver variantes'}
+                            >
+                              {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            </button>
+                          ) : (
+                            <span className="inline-block w-[26px]" />
+                          )}
+                        </td>
+                        <td className="py-2 px-4">
+                          <img
+                            src={p.image || 'https://placehold.co/56x56/f0f0f0/999?text=·'}
+                            alt=""
+                            className="w-14 h-14 object-cover border border-[#eee]"
+                          />
+                        </td>
+                        <td className="py-3 px-4 max-w-[280px]">
+                          <p className="font-medium text-lupo-black line-clamp-2">{p.name}</p>
+                          <p className="text-[11px] text-[#999] font-mono truncate mt-0.5">{p.id}</p>
+                          {hasVariants && (
+                            <p className="text-[10px] text-[#888] mt-0.5">{p.variants!.length} variantes</p>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-lupo-text">
+                          <span className="block">{p.sku ?? '—'}</span>
+                          {(() => {
+                            const parts = parseLupoSku13(p.sku);
+                            if (!parts) return null;
+                            return (
+                              <span className="block text-[10px] text-[#999] mt-0.5 font-mono">
+                                Art. {parts.article} · Talle {parts.size} · Color {parts.color}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td className="py-3 px-4 text-lupo-text">{p.category}</td>
+                        <td className="py-3 px-4 text-right tabular-nums">${p.price.toFixed(2)}</td>
+                        <td className="py-3 px-4 text-right tabular-nums">
+                          <span className={stockClass(p.stockQuantity ?? 0)}>{p.stockQuantity ?? 0}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <Link
+                            to={`/producto/${encodeURIComponent(p.id)}`}
+                            className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-lupo-black hover:underline"
+                          >
+                            Ver
+                            <ExternalLink size={12} />
+                          </Link>
+                        </td>
+                      </tr>
+                      {hasVariants && isOpen ? variantRows(p) : null}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

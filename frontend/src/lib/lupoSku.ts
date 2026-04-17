@@ -18,3 +18,22 @@ export function parseLupoSku13(sku: string | number | undefined | null): {
     color: digits.slice(10, 13),
   };
 }
+
+/** Primeros 7 dígitos (código artículo) desde un SKU 13 dígitos. */
+export function articleCode7(sku: string | number | undefined | null): string | null {
+  return parseLupoSku13(sku)?.article ?? null;
+}
+
+/** Artículo para fila de producto: SKU padre o primera variante con SKU válido. */
+export function articleCodeFromProduct(p: {
+  sku?: string;
+  variants?: Array<{ sku?: string }>;
+}): string | null {
+  const fromProduct = articleCode7(p.sku);
+  if (fromProduct) return fromProduct;
+  for (const v of p.variants ?? []) {
+    const a = articleCode7(v.sku);
+    if (a) return a;
+  }
+  return null;
+}

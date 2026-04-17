@@ -1,9 +1,9 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, ExternalLink, Search } from 'lucide-react';
 import { useProductCatalog } from '../../context/ProductCatalogContext';
 import type { Product } from '../../context/CartContext';
-import { parseLupoSku13 } from '../../lib/lupoSku';
+import { articleCodeFromProduct, parseLupoSku13 } from '../../lib/lupoSku';
 
 function stockClass(qty: number): string {
   if (qty <= 0) return 'text-red-600 font-medium';
@@ -11,9 +11,30 @@ function stockClass(qty: number): string {
   return '';
 }
 
+/** Stock mostrado en la fila producto: suma de variantes o stock del producto. */
+function totalStockForProduct(p: Product): number {
+  if (p.variants?.length) {
+    return p.variants.reduce((sum, v) => sum + Math.max(0, Number(v.stockQuantity) || 0), 0);
+  }
+  return Math.max(0, Number(p.stockQuantity) || 0);
+}
+
 export function AdminCatalog() {
   const { products, loading, error } = useProductCatalog();
-  const [q, setQ] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const q = searchParams.get('q') ?? '';
+  const setQuery = (value: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        const t = value.trim();
+        if (t) next.set('q', value);
+        else next.delete('q');
+        return next;
+      },
+      { replace: true }
+    );
+  };
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const filtered = useMemo(() => {
@@ -39,51 +60,63 @@ export function AdminCatalog() {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const variantRows = (p: Product) => {
+  const variantRows = (p: Product, isOpen: boolean) => {
     const list = p.variants;
     if (!list?.length) return null;
     return (
       <tr className="bg-[#f8f8f8] border-b border-[#ececec]">
-        <td colSpan={8} className="p-0">
-          <div className="px-4 py-3 pl-12 border-t border-[#eee]">
-            <p className="text-[10px] uppercase tracking-wider text-[#888] mb-2">
-              Variantes ({list.length})
-            </p>
-            <div className="overflow-x-auto rounded border border-[#e8e8e8] bg-white">
-              <table className="w-full text-left text-[12px] min-w-[640px]">
-                <thead>
-                  <tr className="border-b border-[#eee] bg-[#fafafa] text-[10px] uppercase tracking-wide text-[#666]">
-                    <th className="py-2 px-3 font-medium">ID TN</th>
-                    <th className="py-2 px-3 font-medium">SKU</th>
-                    <th className="py-2 px-3 font-medium">Descripción</th>
-                    <th className="py-2 px-3 font-medium text-right">Precio</th>
-                    <th className="py-2 px-3 font-medium text-right">Stock</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.map((v) => {
-                    const parts = parseLupoSku13(v.sku);
-                    return (
-                      <tr key={v.id} className="border-b border-[#f4f4f4] last:border-0 hover:bg-[#fafafa]">
-                        <td className="py-2 px-3 font-mono text-[11px] text-[#555] whitespace-nowrap">{v.id}</td>
-                        <td className="py-2 px-3 font-mono text-[11px]">{v.sku ?? '—'}</td>
-                        <td className="py-2 px-3">
-                          <span className="text-lupo-black">{v.name}</span>
-                          {parts && (
-                            <span className="block text-[10px] text-[#999] mt-0.5 font-mono">
-                              Art. {parts.article} · Talle {parts.size} · Color {parts.color}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 px-3 text-right tabular-nums">${v.price.toFixed(2)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums">
-                          <span className={stockClass(v.stockQuantity ?? 0)}>{v.stockQuantity ?? 0}</span>
-                        </td>
+        <td colSpan={8} className="p-0 border-b border-[#ececec]">
+          <div
+            className={`grid transition-[grid-template-rows] duration-500 ease-in-out motion-reduce:transition-none ${
+              isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+            }`}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div
+                className={`px-4 py-3 pl-12 border-t border-[#eee] transition-opacity duration-500 ease-in-out motion-reduce:transition-none ${
+                  isOpen ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
+                <p className="text-[10px] uppercase tracking-wider text-[#888] mb-2">
+                  Variantes ({list.length})
+                </p>
+                <div className="overflow-x-auto rounded border border-[#e8e8e8] bg-white">
+                  <table className="w-full text-left text-[12px] min-w-[640px]">
+                    <thead>
+                      <tr className="border-b border-[#eee] bg-[#fafafa] text-[10px] uppercase tracking-wide text-[#666]">
+                        <th className="py-2 px-3 font-medium">ID TN</th>
+                        <th className="py-2 px-3 font-medium">SKU</th>
+                        <th className="py-2 px-3 font-medium">Descripción</th>
+                        <th className="py-2 px-3 font-medium text-right">Precio</th>
+                        <th className="py-2 px-3 font-medium text-right">Stock</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {list.map((v) => {
+                        const parts = parseLupoSku13(v.sku);
+                        return (
+                          <tr key={v.id} className="border-b border-[#f4f4f4] last:border-0 hover:bg-[#fafafa]">
+                            <td className="py-2 px-3 font-mono text-[11px] text-[#555] whitespace-nowrap">{v.id}</td>
+                            <td className="py-2 px-3 font-mono text-[11px]">{v.sku ?? '—'}</td>
+                            <td className="py-2 px-3">
+                              <span className="text-lupo-black">{v.name}</span>
+                              {parts && (
+                                <span className="block text-[10px] text-[#999] mt-0.5 font-mono">
+                                  Art. {parts.article} · Talle {parts.size} · Color {parts.color}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right tabular-nums">${v.price.toFixed(2)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums">
+                              <span className={stockClass(v.stockQuantity ?? 0)}>{v.stockQuantity ?? 0}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </td>
@@ -105,7 +138,7 @@ export function AdminCatalog() {
         <input
           type="search"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar por nombre, SKU, categoría o ID…"
           className="w-full border border-[#ddd] pl-10 pr-4 py-3 text-[14px] outline-none focus:border-lupo-black bg-white"
         />
@@ -123,7 +156,7 @@ export function AdminCatalog() {
                   <th className="py-3 px-2 font-medium w-[40px]" aria-label="Expandir variantes" />
                   <th className="py-3 px-4 font-medium w-[72px]">Img</th>
                   <th className="py-3 px-4 font-medium">Producto</th>
-                  <th className="py-3 px-4 font-medium">SKU</th>
+                  <th className="py-3 px-4 font-medium">Artículo</th>
                   <th className="py-3 px-4 font-medium">Categoría</th>
                   <th className="py-3 px-4 font-medium text-right">Precio</th>
                   <th className="py-3 px-4 font-medium text-right">Stock</th>
@@ -167,21 +200,29 @@ export function AdminCatalog() {
                           )}
                         </td>
                         <td className="py-3 px-4 text-lupo-text">
-                          <span className="block">{p.sku ?? '—'}</span>
-                          {(() => {
-                            const parts = parseLupoSku13(p.sku);
-                            if (!parts) return null;
-                            return (
-                              <span className="block text-[10px] text-[#999] mt-0.5 font-mono">
-                                Art. {parts.article} · Talle {parts.size} · Color {parts.color}
-                              </span>
-                            );
-                          })()}
+                          {hasVariants ? (
+                            <span className="block font-mono text-[13px] text-lupo-black">
+                              {articleCodeFromProduct(p) ?? p.sku ?? '—'}
+                            </span>
+                          ) : (
+                            <>
+                              <span className="block">{p.sku ?? '—'}</span>
+                              {(() => {
+                                const parts = parseLupoSku13(p.sku);
+                                if (!parts) return null;
+                                return (
+                                  <span className="block text-[10px] text-[#999] mt-0.5 font-mono">
+                                    Art. {parts.article} · Talle {parts.size} · Color {parts.color}
+                                  </span>
+                                );
+                              })()}
+                            </>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-lupo-text">{p.category}</td>
                         <td className="py-3 px-4 text-right tabular-nums">${p.price.toFixed(2)}</td>
                         <td className="py-3 px-4 text-right tabular-nums">
-                          <span className={stockClass(p.stockQuantity ?? 0)}>{p.stockQuantity ?? 0}</span>
+                          <span className={stockClass(totalStockForProduct(p))}>{totalStockForProduct(p)}</span>
                         </td>
                         <td className="py-3 px-4">
                           <Link
@@ -193,7 +234,7 @@ export function AdminCatalog() {
                           </Link>
                         </td>
                       </tr>
-                      {hasVariants && isOpen ? variantRows(p) : null}
+                      {hasVariants ? variantRows(p, isOpen) : null}
                     </Fragment>
                   );
                 })}

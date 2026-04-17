@@ -1,4 +1,5 @@
 import type { RowDataPacket } from 'mysql2/promise';
+import { skuComparable, skuForDbQuery } from '../lupoSku.js';
 import { getPool } from '../pool.js';
 import type { Product, ProductSyncSource, ProductVariant } from '../types.js';
 
@@ -191,8 +192,8 @@ function webhookProductLookupAttempts(
   it: HubStockWebhookPayloadItem
 ): Array<{ sql: string; params: unknown[]; ref: string }> {
   const out: Array<{ sql: string; params: unknown[]; ref: string }> = [];
-  const bySku = nonEmptyString(it.sku);
-  if (bySku) out.push({ sql: 'sku = ?', params: [bySku], ref: `sku:${bySku}` });
+  const skuQ = skuForDbQuery(it.sku);
+  if (skuQ) out.push({ sql: 'sku = ?', params: [skuQ], ref: `sku:${skuQ}` });
   const byTn = nonEmptyString(it.external_tn_id);
   if (byTn) out.push({ sql: 'external_tn_id = ?', params: [byTn], ref: `external_tn_id:${byTn}` });
   const byId = nonEmptyString(it.id);
@@ -342,10 +343,10 @@ export async function applyStockWebhookFromHub(
         let match = nextVariants.find(
           (v) =>
             (explicitVariantId && v.id === explicitVariantId) ||
-            (explicitVariantSku && nonEmptyString(v.sku) === explicitVariantSku)
+            (explicitVariantSku && skuComparable(v.sku, explicitVariantSku))
         );
         if (!match && payloadSku) {
-          match = nextVariants.find((v) => nonEmptyString(v.sku) === payloadSku);
+          match = nextVariants.find((v) => skuComparable(v.sku, it.sku));
         }
         if (match) {
           match.stockQuantity = targetStock;

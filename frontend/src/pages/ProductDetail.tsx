@@ -256,6 +256,44 @@ function inferColorHex(name?: string): string | undefined {
   return undefined;
 }
 
+function inferCompositeColorHexes(name?: string): string[] {
+  const n = normalizeToken(name);
+  if (!n) return [];
+
+  const parts = n
+    .split(/\s*(?:y|e|\/|\\|\+|&|,| con )\s*/gi)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const out: string[] = [];
+  for (const part of parts) {
+    const hex = inferColorHex(part);
+    if (hex && !out.includes(hex)) out.push(hex);
+  }
+
+  if (out.length === 0) {
+    const single = inferColorHex(n);
+    if (single) out.push(single);
+  }
+
+  return out.slice(0, 4);
+}
+
+function inferColorSwatch(name?: string): { hex?: string; swatchCss?: string } {
+  const palette = inferCompositeColorHexes(name);
+  if (palette.length === 0) return {};
+  if (palette.length === 1) return { hex: palette[0] };
+
+  const size = 100 / palette.length;
+  const stops = palette
+    .map((hex, i) => `${hex} ${(i * size).toFixed(2)}% ${((i + 1) * size).toFixed(2)}%`)
+    .join(', ');
+  return {
+    hex: palette[0],
+    swatchCss: `linear-gradient(90deg, ${stops})`,
+  };
+}
+
 function variantSize(variant: ProductVariant): string | undefined {
   if (variant.size?.trim()) return variant.size.trim();
   const byOption = variant.optionValues?.find((ov) =>
@@ -265,7 +303,7 @@ function variantSize(variant: ProductVariant): string | undefined {
   return byOption?.value?.trim() || undefined;
 }
 
-function variantColor(variant: ProductVariant): { key: string; name: string; hex?: string } | null {
+function variantColor(variant: ProductVariant): { key: string; name: string; hex?: string; swatchCss?: string } | null {
   const inferredFromName = extractColorFromVariantName(variant);
   const colorField = variant.colorName?.trim();
   const colorFieldOk = colorField && !isLikelySize(colorField) ? colorField : undefined;
@@ -284,11 +322,11 @@ function variantColor(variant: ProductVariant): { key: string; name: string; hex
   const colorOnly = explicitName ? colorNameWithoutSizeTokens(explicitName) : '';
   const namePart = colorOnly && !isLikelySize(colorOnly) ? colorOnly : '';
 
+  const inferredSwatch = inferColorSwatch(namePart || explicitName);
   const explicitHex =
     normalizeColorHex(variant.colorHex) ||
     normalizeColorHex(nameByOption?.swatch) ||
-    inferColorHex(namePart) ||
-    inferColorHex(explicitName);
+    inferredSwatch.hex;
 
   if (!namePart && !explicitHex) return null;
   const name = namePart || 'Color';
@@ -296,6 +334,7 @@ function variantColor(variant: ProductVariant): { key: string; name: string; hex
     key: normalizeToken(namePart || explicitHex || name),
     name,
     hex: explicitHex,
+    swatchCss: inferredSwatch.swatchCss,
   };
 }
 
@@ -327,7 +366,7 @@ export function ProductDetail() {
 
   const colorOptions = useMemo(() => {
     const seen = new Set<string>();
-    const out: Array<{ key: string; name: string; hex?: string }> = [];
+    const out: Array<{ key: string; name: string; hex?: string; swatchCss?: string }> = [];
     for (const row of variantRows) {
       if (!row.color) continue;
       if (seen.has(row.color.key)) continue;
@@ -569,9 +608,11 @@ export function ProductDetail() {
                         {colorOptions.map((color) => {
                           const active = selectedColorKey === color.key;
                           const available = availableColors.has(color.key);
-                          const swatchStyle = color.hex
-                            ? { backgroundColor: color.hex }
-                            : { backgroundColor: '#dddddd' };
+                          const swatchStyle = color.swatchCss
+                            ? { background: color.swatchCss }
+                            : color.hex
+                              ? { backgroundColor: color.hex }
+                              : { backgroundColor: '#dddddd' };
                           return (
                             <button
                               key={color.key}

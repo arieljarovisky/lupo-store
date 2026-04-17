@@ -366,6 +366,22 @@ function mapVariants(
   return mapped.filter((v): v is ProductVariant => v !== null);
 }
 
+function chooseProductSku(
+  raw: Record<string, unknown>,
+  variants: ProductVariant[]
+): string | undefined {
+  const ownSku = String(raw.sku ?? '').trim();
+  if (ownSku) return ownSku;
+
+  const withStock = variants.find((v) => (v.stockQuantity ?? 0) > 0 && v.sku?.trim());
+  if (withStock?.sku?.trim()) return withStock.sku.trim();
+
+  const anyVariantSku = variants.find((v) => v.sku?.trim());
+  if (anyVariantSku?.sku?.trim()) return anyVariantSku.sku.trim();
+
+  return undefined;
+}
+
 export function mapTiendaNubeProduct(raw: Record<string, unknown>): Product | null {
   if (raw.published === false) return null;
 
@@ -399,9 +415,11 @@ export function mapTiendaNubeProduct(raw: Record<string, unknown>): Product | nu
 
   const description =
     normalizeDescriptionHtml(raw.description) ?? normalizeDescriptionHtml(raw.seo_description);
+  const sku = chooseProductSku(raw, mappedVariants);
 
   return {
     id,
+    sku,
     name,
     price,
     stockQuantity,

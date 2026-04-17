@@ -181,19 +181,22 @@ function safeNonNegativeStock(v: unknown): number | null {
 }
 
 /**
- * Intentos en orden: si el ERP manda varios campos, se prueba cada uno hasta encontrar fila.
- * Así un `id` que no existe en la tienda no bloquea el match por `sku` o `external_tn_id`.
+ * Orden pensado para ERP + Tienda Nube:
+ * 1) external_tn_id — ID de producto en TN (columna homónima; en import suele coincidir con `id`)
+ * 2) id — mismo ID que `products.id` (TN guarda el id de producto aquí)
+ * 3) sku — SKU a nivel producto (fallback)
+ * 4) external_ml_id
  */
 function webhookProductLookupAttempts(
   it: HubStockWebhookPayloadItem
 ): Array<{ sql: string; params: unknown[]; ref: string }> {
   const out: Array<{ sql: string; params: unknown[]; ref: string }> = [];
+  const byTn = nonEmptyString(it.external_tn_id);
+  if (byTn) out.push({ sql: 'external_tn_id = ?', params: [byTn], ref: `external_tn_id:${byTn}` });
   const byId = nonEmptyString(it.id);
   if (byId) out.push({ sql: 'id = ?', params: [byId], ref: `id:${byId}` });
   const bySku = nonEmptyString(it.sku);
   if (bySku) out.push({ sql: 'sku = ?', params: [bySku], ref: `sku:${bySku}` });
-  const byTn = nonEmptyString(it.external_tn_id);
-  if (byTn) out.push({ sql: 'external_tn_id = ?', params: [byTn], ref: `external_tn_id:${byTn}` });
   const byMl = nonEmptyString(it.external_ml_id);
   if (byMl) out.push({ sql: 'external_ml_id = ?', params: [byMl], ref: `external_ml_id:${byMl}` });
   return out;
@@ -264,9 +267,9 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
 
 /**
  * Webhook de stock desde ERP/Lupo Hub.
- * Identificación del producto: se prueba, en orden, cada campo no vacío entre
- * id → sku → external_tn_id → external_ml_id hasta encontrar una fila.
- * Opcionalmente: variant_id / variant_sku para tocar una variante en variants_json.
+ * Producto: external_tn_id → id → sku → external_ml_id (primer match).
+ * Variante: variant_id / variant_sku; si no van, el `sku` del ítem se interpreta como
+ * SKU de variante cuando hay variants_json y coincide con alguna variante (típico: TN id + SKU artículo).
  */
 export async function applyStockWebhookFromHub(
   items: HubStockWebhookPayloadItem[]
@@ -326,17 +329,25 @@ export async function applyStockWebhookFromHub(
       }
 
       const current = rowToProduct(rows[0]);
-      const variantId = nonEmptyString(it.variant_id);
-      const variantSku = nonEmptyString(it.variant_sku);
+      const explicitVariantId = nonEmptyString(it.variant_id);
+      const explicitVariantSku = nonEmptyString(it.variant_sku);
+      const payloadSku = nonEmptyString(it.sku);
+      const hadExplicitVariantHint = Boolean(explicitVariantId || explicitVariantSku);
+
       let nextVariants = current.variants;
       let nextProductStock = targetStock;
       let touchedVariant = false;
 
-      if ((variantId || variantSku) && current.variants?.length) {
+      if (current.variants?.length) {
         nextVariants = current.variants.map((v) => ({ ...v }));
-        const match = nextVariants.find(
-          (v) => (variantId && v.id === variantId) || (variantSku && nonEmptyString(v.sku) === variantSku)
+        let match = nextVariants.find(
+          (v) =>
+            (explicitVariantId && v.id === explicitVariantId) ||
+            (explicitVariantSku && nonEmptyString(v.sku) === explicitVariantSku)
         );
+        if (!match && payloadSku) {
+          match = nextVariants.find((v) => nonEmptyString(v.sku) === payloadSku);
+        }
         if (match) {
           match.stockQuantity = targetStock;
           nextProductStock = nextVariants.reduce(
@@ -360,10 +371,10 @@ export async function applyStockWebhookFromHub(
       );
       result.updated += 1;
 
-      if ((variantId || variantSku) && !touchedVariant) {
+      if (hadExplicitVariantHint && current.variants?.length && !touchedVariant) {
         result.invalid.push({
           index,
-          reason: 'Se actualizó stock del producto, pero no se encontró la variante indicada.',
+          reason: 'No se encontró la variante (variant_id / variant_sku). El stock del producto se dejó como valor enviado.',
         });
       }
     }

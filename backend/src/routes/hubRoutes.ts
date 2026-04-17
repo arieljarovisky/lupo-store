@@ -57,7 +57,8 @@ hubRouter.post('/products', async (req, res) => {
 /**
  * Webhook de stock desde ERP.
  * Acepta:
- * - { updates: [{ id|sku|external_tn_id|external_ml_id, stock_quantity, variant_id?, variant_sku? }, ...] }
+ * - { updates: [{ external_tn_id|id|sku|external_ml_id, stock_quantity, variant_id?, variant_sku? }, ...] }
+ *   Preferí external_tn_id (ID producto TN) + sku (artículo / variante en variants_json).
  * - o directamente un array de items.
  * Seguridad:
  * - x-hub-api-key (HUB_API_KEY)

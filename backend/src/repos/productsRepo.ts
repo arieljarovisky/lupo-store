@@ -181,22 +181,22 @@ function safeNonNegativeStock(v: unknown): number | null {
 }
 
 /**
- * Orden pensado para ERP + Tienda Nube:
- * 1) external_tn_id — ID de producto en TN (columna homónima; en import suele coincidir con `id`)
- * 2) id — mismo ID que `products.id` (TN guarda el id de producto aquí)
- * 3) sku — SKU a nivel producto (fallback)
+ * Orden: primero SKU (coincide con ERP), luego IDs externos.
+ * 1) sku — columna `products.sku`
+ * 2) external_tn_id — ID producto TN
+ * 3) id — `products.id`
  * 4) external_ml_id
  */
 function webhookProductLookupAttempts(
   it: HubStockWebhookPayloadItem
 ): Array<{ sql: string; params: unknown[]; ref: string }> {
   const out: Array<{ sql: string; params: unknown[]; ref: string }> = [];
+  const bySku = nonEmptyString(it.sku);
+  if (bySku) out.push({ sql: 'sku = ?', params: [bySku], ref: `sku:${bySku}` });
   const byTn = nonEmptyString(it.external_tn_id);
   if (byTn) out.push({ sql: 'external_tn_id = ?', params: [byTn], ref: `external_tn_id:${byTn}` });
   const byId = nonEmptyString(it.id);
   if (byId) out.push({ sql: 'id = ?', params: [byId], ref: `id:${byId}` });
-  const bySku = nonEmptyString(it.sku);
-  if (bySku) out.push({ sql: 'sku = ?', params: [bySku], ref: `sku:${bySku}` });
   const byMl = nonEmptyString(it.external_ml_id);
   if (byMl) out.push({ sql: 'external_ml_id = ?', params: [byMl], ref: `external_ml_id:${byMl}` });
   return out;
@@ -267,9 +267,8 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
 
 /**
  * Webhook de stock desde ERP/Lupo Hub.
- * Producto: external_tn_id → id → sku → external_ml_id (primer match).
- * Variante: variant_id / variant_sku; si no van, el `sku` del ítem se interpreta como
- * SKU de variante cuando hay variants_json y coincide con alguna variante (típico: TN id + SKU artículo).
+ * Producto: sku → external_tn_id → id → external_ml_id (primer match).
+ * Variante: variant_id / variant_sku; si no van, el `sku` del ítem se usa para matchear variante en variants_json.
  */
 export async function applyStockWebhookFromHub(
   items: HubStockWebhookPayloadItem[]

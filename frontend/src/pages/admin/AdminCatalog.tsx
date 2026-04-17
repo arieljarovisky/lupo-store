@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, ExternalLink } from 'lucide-react';
 import { useProductCatalog } from '../../context/ProductCatalogContext';
+import { parseLupoSku13 } from '../../lib/lupoSku';
 
 export function AdminCatalog() {
   const { products, loading, error } = useProductCatalog();
@@ -71,7 +72,23 @@ export function AdminCatalog() {
                       <p className="font-medium text-lupo-black line-clamp-2">{p.name}</p>
                       <p className="text-[11px] text-[#999] font-mono truncate mt-0.5">{p.id}</p>
                     </td>
-                    <td className="py-3 px-4 text-lupo-text">{p.sku ?? '—'}</td>
+                    <td className="py-3 px-4 text-lupo-text">
+                      <span className="block">{p.sku ?? '—'}</span>
+                      {(() => {
+                        const parts = parseLupoSku13(p.sku);
+                        if (!parts) return null;
+                        return (
+                          <span className="block text-[10px] text-[#999] mt-0.5 font-mono">
+                            Art. {parts.article} · Talle {parts.size} · Color {parts.color}
+                          </span>
+                        );
+                      })()}
+                      {p.variants && p.variants.length > 1 && (
+                        <span className="block text-[10px] text-[#666] mt-0.5">
+                          {p.variants.length} variantes en catálogo
+                        </span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-lupo-text">{p.category}</td>
                     <td className="py-3 px-4 text-right tabular-nums">${p.price.toFixed(2)}</td>
                     <td className="py-3 px-4 text-right tabular-nums">

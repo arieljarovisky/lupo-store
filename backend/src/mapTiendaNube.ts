@@ -328,6 +328,27 @@ function optionValuesFromVariant(
   return out;
 }
 
+/** Stock total: `stock` legacy o suma de `inventory_levels` (multi-inventario). */
+function variantStockFromApi(v: Record<string, unknown>): number {
+  const raw = v.stock;
+  if (raw != null && raw !== '') {
+    const n = Number.parseInt(String(raw), 10);
+    if (!Number.isNaN(n)) return Math.max(0, n);
+  }
+  const levels = v.inventory_levels;
+  if (Array.isArray(levels)) {
+    let sum = 0;
+    for (const lvl of levels) {
+      if (lvl && typeof lvl === 'object') {
+        const s = (lvl as Record<string, unknown>).stock;
+        if (s != null) sum += Math.max(0, Number(s) || 0);
+      }
+    }
+    return Math.round(sum);
+  }
+  return 0;
+}
+
 function mapVariants(
   rawVariants: Record<string, unknown>[],
   imagesById: Map<string, string>,
@@ -337,9 +358,8 @@ function mapVariants(
       const id = String(v.id ?? '').trim();
       if (!id) return null;
       const priceNum = Number.parseFloat(String(v.price ?? '0').replace(',', '.'));
-      const stockNum = Number.parseInt(String(v.stock ?? '0'), 10);
       const price = Number.isNaN(priceNum) ? 0 : Math.round(priceNum);
-      const stockQuantity = Number.isNaN(stockNum) ? 0 : Math.max(0, stockNum);
+      const stockQuantity = variantStockFromApi(v);
       const optionValues = optionValuesFromVariant(v, catalog);
       const inferred = inferVariantDetails(optionValues);
       const imageId = String(v.image_id ?? v.imageId ?? '').trim();

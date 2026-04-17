@@ -16,6 +16,8 @@ export interface TiendaNubeFetchOptions {
   apiVersion?: string;
   /** Pausa entre páginas (ms) para respetar límites de la API */
   pageDelayMs?: number;
+  /** Pausa entre GET /products/{id}/variants (por defecto 300 ms) */
+  variantFetchDelayMs?: number;
   perPage?: number;
 }
 
@@ -61,5 +63,41 @@ export async function fetchAllProductsFromTiendaNube(
     await sleep(pageDelayMs);
   }
 
+  await enrichProductsWithVariantsFromEndpoint(opts, all);
+
   return all;
+}
+
+/**
+ * El listado GET /products a veces trae pocas variantes; el endpoint dedicado devuelve todas.
+ * Ver: GET /products/{product_id}/variants
+ */
+async function enrichProductsWithVariantsFromEndpoint(
+  opts: TiendaNubeFetchOptions,
+  products: Record<string, unknown>[]
+): Promise<void> {
+  const { storeId, accessToken, userAgent } = opts;
+  const version = opts.apiVersion ?? DEFAULT_VERSION;
+  const delayMs = opts.variantFetchDelayMs ?? 300;
+
+  const headers: Record<string, string> = {
+    Authentication: `bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+    'User-Agent': userAgent,
+  };
+
+  for (const p of products) {
+    const id = String(p.id ?? '').trim();
+    if (!id) continue;
+
+    const url = `${apiBase(version)}/${storeId}/products/${id}/variants`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) continue;
+
+    const batch = (await res.json()) as unknown;
+    if (Array.isArray(batch) && batch.length > 0) {
+      p.variants = batch as Record<string, unknown>[];
+    }
+    await sleep(delayMs);
+  }
 }

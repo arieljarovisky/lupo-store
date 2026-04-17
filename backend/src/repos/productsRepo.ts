@@ -152,6 +152,52 @@ export interface HubProductPayload {
   external_ml_id?: string | null;
 }
 
+export interface HubStockWebhookPayloadItem {
+  id?: string | null;
+  sku?: string | null;
+  external_tn_id?: string | null;
+  external_ml_id?: string | null;
+  variant_id?: string | null;
+  variant_sku?: string | null;
+  stock_quantity: number;
+}
+
+export interface HubStockWebhookResult {
+  received: number;
+  updated: number;
+  variantUpdated: number;
+  invalid: Array<{ index: number; reason: string }>;
+  notFound: Array<{ index: number; ref: string }>;
+}
+
+function nonEmptyString(v: unknown): string | null {
+  const s = String(v ?? '').trim();
+  return s || null;
+}
+
+function safeNonNegativeStock(v: unknown): number | null {
+  if (typeof v !== 'number' || Number.isNaN(v) || !Number.isFinite(v)) return null;
+  return Math.max(0, Math.round(v));
+}
+
+function productLookupForWebhookItem(it: HubStockWebhookPayloadItem):
+  | { sql: string; params: unknown[]; ref: string }
+  | null {
+  const byId = nonEmptyString(it.id);
+  if (byId) return { sql: 'id = ?', params: [byId], ref: `id:${byId}` };
+
+  const bySku = nonEmptyString(it.sku);
+  if (bySku) return { sql: 'sku = ?', params: [bySku], ref: `sku:${bySku}` };
+
+  const byTn = nonEmptyString(it.external_tn_id);
+  if (byTn) return { sql: 'external_tn_id = ?', params: [byTn], ref: `external_tn_id:${byTn}` };
+
+  const byMl = nonEmptyString(it.external_ml_id);
+  if (byMl) return { sql: 'external_ml_id = ?', params: [byMl], ref: `external_ml_id:${byMl}` };
+
+  return null;
+}
+
 /** Upsert parcial desde Lupo Hub (stock / precio / IDs externos). */
 export async function upsertProductsFromHub(items: HubProductPayload[]): Promise<number> {
   if (items.length === 0) return 0;
@@ -207,6 +253,111 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
     }
     await conn.commit();
     return n;
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Webhook de stock desde ERP/Lupo Hub.
+ * Permite identificar producto por id, sku, external_tn_id o external_ml_id.
+ * Opcionalmente permite actualizar una variante puntual con variant_id / variant_sku.
+ */
+export async function applyStockWebhookFromHub(
+  items: HubStockWebhookPayloadItem[]
+): Promise<HubStockWebhookResult> {
+  const result: HubStockWebhookResult = {
+    received: items.length,
+    updated: 0,
+    variantUpdated: 0,
+    invalid: [],
+    notFound: [],
+  };
+  if (items.length === 0) return result;
+
+  const p = await getPool();
+  const conn = await p.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    for (let index = 0; index < items.length; index += 1) {
+      const it = items[index];
+      const targetStock = safeNonNegativeStock(it.stock_quantity);
+      if (targetStock === null) {
+        result.invalid.push({ index, reason: 'stock_quantity debe ser un número válido.' });
+        continue;
+      }
+
+      const lookup = productLookupForWebhookItem(it);
+      if (!lookup) {
+        result.invalid.push({
+          index,
+          reason: 'Falta identificador. Enviá id, sku, external_tn_id o external_ml_id.',
+        });
+        continue;
+      }
+
+      const [rows] = await conn.query<RowDataPacket[]>(
+        `SELECT id, sku, name, price, stock_quantity, image, category, description,
+                external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json, images_json
+         FROM products
+         WHERE ${lookup.sql}
+         LIMIT 1`,
+        lookup.params
+      );
+      if (!rows.length) {
+        result.notFound.push({ index, ref: lookup.ref });
+        continue;
+      }
+
+      const current = rowToProduct(rows[0]);
+      const variantId = nonEmptyString(it.variant_id);
+      const variantSku = nonEmptyString(it.variant_sku);
+      let nextVariants = current.variants;
+      let nextProductStock = targetStock;
+      let touchedVariant = false;
+
+      if ((variantId || variantSku) && current.variants?.length) {
+        nextVariants = current.variants.map((v) => ({ ...v }));
+        const match = nextVariants.find(
+          (v) => (variantId && v.id === variantId) || (variantSku && nonEmptyString(v.sku) === variantSku)
+        );
+        if (match) {
+          match.stockQuantity = targetStock;
+          nextProductStock = nextVariants.reduce(
+            (sum, v) => sum + Math.max(0, Number(v.stockQuantity) || 0),
+            0
+          );
+          touchedVariant = true;
+          result.variantUpdated += 1;
+        }
+      }
+
+      await conn.query(
+        `UPDATE products
+         SET stock_quantity = ?, variants_json = ?, sync_source = 'lupo_hub', hub_synced_at = NOW()
+         WHERE id = ?`,
+        [
+          nextProductStock,
+          nextVariants?.length ? JSON.stringify(nextVariants) : null,
+          current.id,
+        ]
+      );
+      result.updated += 1;
+
+      if ((variantId || variantSku) && !touchedVariant) {
+        result.invalid.push({
+          index,
+          reason: 'Se actualizó stock del producto, pero no se encontró la variante indicada.',
+        });
+      }
+    }
+
+    await conn.commit();
+    return result;
   } catch (e) {
     await conn.rollback();
     throw e;

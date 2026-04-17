@@ -37,7 +37,15 @@ app.use(
   cors({
     origin: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-hub-api-key'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-hub-api-key',
+      'x-hub-timestamp',
+      'x-hub-signature',
+      'x-webhook-id',
+      'x-idempotency-key',
+    ],
   })
 );
 app.use(express.json());

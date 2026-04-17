@@ -128,6 +128,20 @@ export async function runMigrations(p: Pool): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS hub_webhook_events (
+      event_id VARCHAR(128) NOT NULL,
+      endpoint VARCHAR(128) NOT NULL,
+      payload_hash CHAR(64) NOT NULL,
+      status VARCHAR(16) NOT NULL DEFAULT 'processing',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      processed_at TIMESTAMP NULL DEFAULT NULL,
+      PRIMARY KEY (event_id),
+      KEY idx_hub_webhook_status (status),
+      KEY idx_hub_webhook_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   await addColumn(p, 'products', 'sku', '`sku` VARCHAR(128) DEFAULT NULL AFTER `id`');
   await addColumn(
     p,

@@ -47,7 +47,7 @@ export function Navbar() {
             to="/admin"
             className="text-[12px] font-medium tracking-[1.5px] uppercase hover:opacity-70 transition-opacity"
           >
-            Iniciar sesión
+            Admin
           </Link>
 
           {/* Cart Button */}
@@ -74,7 +74,7 @@ export function Navbar() {
             <Link to="/shop?category=hombre">Hombre</Link>
             <Link to="/shop?category=damas">Damas</Link>
             <Link to="/shop?category=deportivo">Deportivo</Link>
-            <Link to="/admin">Iniciar sesión</Link>
+            <Link to="/admin">Admin</Link>
           </div>
         </div>
       )}

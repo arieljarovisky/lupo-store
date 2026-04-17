@@ -1,0 +1,244 @@
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Upload, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { useProductCatalog } from '../../context/ProductCatalogContext';
+import {
+  disconnectTiendaNube,
+  getTiendaNubeConnectionStatus,
+  importFromTiendaNube,
+  startTiendaNubeOAuth,
+} from '../../lib/api';
+
+export function AdminTiendaNube() {
+  const { refetch, products } = useProductCatalog();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [isImporting, setIsImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [lastMessage, setLastMessage] = useState<string | null>(null);
+  const [tnStatus, setTnStatus] = useState<{
+    connected: boolean;
+    source: 'oauth' | 'env' | 'none';
+    storeId: string | null;
+    connectedAt: string | null;
+    hasOauthConfig: boolean;
+  } | null>(null);
+  const [tnError, setTnError] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  useEffect(() => {
+    getTiendaNubeConnectionStatus().then((s) => {
+      if (s.error) {
+        setTnError(s.error);
+        return;
+      }
+      setTnError(null);
+      setTnStatus({
+        connected: s.connected,
+        source: s.source,
+        storeId: s.storeId,
+        connectedAt: s.connectedAt,
+        hasOauthConfig: s.hasOauthConfig,
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    const oauthResult = searchParams.get('tn_oauth');
+    if (!oauthResult) return;
+    const oauthMsg = searchParams.get('message');
+    const oauthStore = searchParams.get('store');
+    if (oauthResult === 'ok') {
+      setImportStatus('success');
+      setLastMessage(
+        oauthStore
+          ? `Tienda conectada correctamente (store ${oauthStore}). Ya podés importar productos.`
+          : 'Tienda conectada correctamente. Ya podés importar productos.'
+      );
+      getTiendaNubeConnectionStatus().then((s) => {
+        if (!s.error) {
+          setTnStatus({
+            connected: s.connected,
+            source: s.source,
+            storeId: s.storeId,
+            connectedAt: s.connectedAt,
+            hasOauthConfig: s.hasOauthConfig,
+          });
+          setTnError(null);
+        }
+      });
+    } else {
+      setImportStatus('error');
+      setLastMessage(oauthMsg || 'No se pudo completar la conexión OAuth con Tienda Nube.');
+    }
+    setSearchParams({});
+  }, [searchParams, setSearchParams]);
+
+  const handleImport = async () => {
+    setIsImporting(true);
+    setImportStatus('idle');
+    setLastMessage(null);
+
+    const result = await importFromTiendaNube();
+    setIsImporting(false);
+
+    if (result.ok) {
+      setImportStatus('success');
+      setLastMessage(result.message ?? `Se importaron ${result.imported} productos.`);
+      refetch();
+    } else {
+      setImportStatus('error');
+      setLastMessage(result.error ?? 'Error desconocido');
+    }
+  };
+
+  const handleConnect = async () => {
+    setIsConnecting(true);
+    setImportStatus('idle');
+    setLastMessage(null);
+    const r = await startTiendaNubeOAuth('/admin/tiendanube');
+    setIsConnecting(false);
+    if (!r.ok || !r.url) {
+      setImportStatus('error');
+      setLastMessage(r.error ?? 'No se pudo iniciar OAuth con Tienda Nube.');
+      return;
+    }
+    window.location.href = r.url;
+  };
+
+  const handleDisconnect = async () => {
+    setIsDisconnecting(true);
+    const r = await disconnectTiendaNube();
+    setIsDisconnecting(false);
+    if (!r.ok) {
+      setImportStatus('error');
+      setLastMessage(r.error ?? 'No se pudo desconectar la tienda.');
+      return;
+    }
+    setTnStatus((prev) =>
+      prev
+        ? { ...prev, connected: false, source: 'none', storeId: null, connectedAt: null }
+        : { connected: false, source: 'none', storeId: null, connectedAt: null, hasOauthConfig: false }
+    );
+    setImportStatus('success');
+    setLastMessage('Conexión OAuth eliminada. Podés volver a conectar otra tienda.');
+  };
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-[28px] md:text-[34px] font-light tracking-[-0.5px] text-lupo-black mb-2">
+          Tienda Nube
+        </h1>
+        <p className="text-[14px] text-lupo-text">
+          Conectá tu tienda Nuvemshop e importá el catálogo publicado. Actualmente hay{' '}
+          <strong>{products.length}</strong> producto{products.length === 1 ? '' : 's'} en el sitio.
+        </p>
+      </div>
+
+      <div className="bg-white border border-[#e8e8e8] p-6 md:p-8">
+        <h2 className="text-[16px] font-medium mb-6 text-lupo-black flex items-center gap-2">
+          <RefreshCw size={20} strokeWidth={1.5} />
+          Sincronización
+        </h2>
+
+        <p className="text-[14px] text-[#666] mb-8 leading-[1.6]">
+          Usá OAuth para autorizar la app y luego importá todos los productos desde la API de Tienda Nube.
+        </p>
+
+        <div className="mb-8 p-4 border border-[#e8e8e8] bg-[#fafafa]">
+          <p className="text-[11px] uppercase tracking-[1.5px] mb-2 font-medium">Estado de conexión</p>
+          <p className="text-[14px] text-lupo-text">
+            {tnStatus?.connected
+              ? `Conectado (${tnStatus.source === 'oauth' ? 'OAuth' : 'variables del servidor'})`
+              : 'Sin conexión con Tienda Nube'}
+            {tnStatus?.storeId ? ` · tienda ${tnStatus.storeId}` : ''}
+          </p>
+          {tnError && <p className="text-[12px] text-red-600 mt-2 whitespace-pre-wrap">{tnError}</p>}
+          {!tnStatus?.hasOauthConfig && (
+            <p className="text-[12px] text-[#9A6A00] mt-2">
+              Falta configurar OAuth en backend (TIENDANUBE_CLIENT_ID, TIENDANUBE_CLIENT_SECRET,
+              TIENDANUBE_REDIRECT_URI).
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-3 mb-8">
+          <button
+            type="button"
+            onClick={handleConnect}
+            disabled={isConnecting || tnStatus?.hasOauthConfig === false}
+            className={`bg-lupo-black text-white px-[22px] py-[12px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors ${
+              isConnecting || tnStatus?.hasOauthConfig === false
+                ? 'opacity-70 cursor-not-allowed'
+                : 'hover:bg-black/80'
+            }`}
+          >
+            {isConnecting ? 'Conectando…' : tnStatus?.connected ? 'Reconectar tienda' : 'Conectar Tienda Nube'}
+          </button>
+          {tnStatus?.source === 'oauth' && (
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              disabled={isDisconnecting}
+              className={`border border-lupo-border px-[22px] py-[12px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors ${
+                isDisconnecting ? 'opacity-70 cursor-not-allowed' : 'hover:bg-black hover:text-white'
+              }`}
+            >
+              {isDisconnecting ? 'Desconectando…' : 'Desconectar'}
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          <button
+            type="button"
+            onClick={handleImport}
+            disabled={isImporting || !tnStatus?.connected}
+            className={`flex items-center justify-center gap-2 bg-lupo-black text-white px-[30px] py-[14px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors ${
+              isImporting || !tnStatus?.connected ? 'opacity-70 cursor-not-allowed' : 'hover:bg-black/80'
+            }`}
+          >
+            {isImporting ? (
+              <>
+                <RefreshCw size={16} className="animate-spin" />
+                Importando…
+              </>
+            ) : (
+              <>
+                <Upload size={16} />
+                Importar productos
+              </>
+            )}
+          </button>
+
+          {importStatus === 'success' && (
+            <div className="flex items-center gap-2 text-[#2E7D32] text-[13px] font-medium">
+              <CheckCircle2 size={16} />
+              {lastMessage}
+            </div>
+          )}
+
+          {importStatus === 'error' && (
+            <div className="flex flex-col gap-1 text-red-600 text-[13px] font-medium">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} />
+                Error
+              </div>
+              {lastMessage && <p className="text-[12px] font-normal pl-6 opacity-90">{lastMessage}</p>}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-10 pt-8 border-t border-[#e8e8e8]">
+          <h3 className="text-[14px] font-medium mb-4 text-lupo-black">Otras opciones</h3>
+          <div className="border-2 border-dashed border-[#EEE] p-8 text-center bg-[#F9F9F9]">
+            <Upload size={24} className="mx-auto mb-3 text-[#AAA]" />
+            <p className="text-[13px] text-lupo-black font-medium mb-1">Importación por CSV</p>
+            <p className="text-[11px] text-[#777]">Próximamente desde el panel.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

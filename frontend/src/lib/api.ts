@@ -214,11 +214,15 @@ export async function getTiendaNubeConnectionStatus(): Promise<{
   }
 }
 
-export async function startTiendaNubeOAuth(): Promise<{ ok: boolean; url?: string; error?: string }> {
+/** `dashboardPath` = ruta de retorno tras OAuth (ej. `/admin` o `/admin/tiendanube`). */
+export async function startTiendaNubeOAuth(
+  dashboardPath = '/admin'
+): Promise<{ ok: boolean; url?: string; error?: string }> {
   const base = apiBase();
   const url = base ? `${base}/api/admin/tiendanube/oauth/start` : '/api/admin/tiendanube/oauth/start';
+  const path = dashboardPath.startsWith('/') ? dashboardPath : `/${dashboardPath}`;
   const dashboardUrl =
-    typeof window !== 'undefined' ? `${window.location.origin.replace(/\/$/, '')}/admin` : undefined;
+    typeof window !== 'undefined' ? `${window.location.origin.replace(/\/$/, '')}${path}` : undefined;
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -250,6 +254,93 @@ export async function disconnectTiendaNube(): Promise<{ ok: boolean; error?: str
       return { ok: false, error: data.error || `HTTP ${res.status}` };
     }
     return { ok: true };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
+export interface AdminOrder {
+  id: number;
+  customerId: number | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  status: string;
+  paymentStatus: string;
+  subtotal: number;
+  total: number;
+  currency: string;
+  createdAt: string;
+  items: Array<{
+    id: number;
+    productId: string;
+    productNameSnapshot: string;
+    unitPrice: number;
+    quantity: number;
+    lineTotal: number;
+  }>;
+}
+
+export interface AdminCustomerRow {
+  id: number;
+  email: string | null;
+  phone: string | null;
+  full_name: string | null;
+  created_at: string;
+}
+
+export async function fetchAdminOrders(): Promise<{ ok: true; orders: AdminOrder[] } | { ok: false; error: string }> {
+  const base = apiBase();
+  const url = base ? `${base}/api/admin/orders` : '/api/admin/orders';
+  try {
+    const res = await fetch(url, { headers: adminAuthHeaders() });
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      clearAdminToken();
+      return { ok: false, error: 'Sesión expirada.' };
+    }
+    if (!res.ok) {
+      let err = `HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(text) as { error?: string };
+        if (j.error) err = j.error;
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, error: err };
+    }
+    const orders = JSON.parse(text) as AdminOrder[];
+    return { ok: true, orders };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
+export async function fetchAdminCustomers(): Promise<
+  { ok: true; customers: AdminCustomerRow[] } | { ok: false; error: string }
+> {
+  const base = apiBase();
+  const url = base ? `${base}/api/admin/customers` : '/api/admin/customers';
+  try {
+    const res = await fetch(url, { headers: adminAuthHeaders() });
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      clearAdminToken();
+      return { ok: false, error: 'Sesión expirada.' };
+    }
+    if (!res.ok) {
+      let err = `HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(text) as { error?: string };
+        if (j.error) err = j.error;
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, error: err };
+    }
+    const customers = JSON.parse(text) as AdminCustomerRow[];
+    return { ok: true, customers };
   } catch (e) {
     if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
     throw e;

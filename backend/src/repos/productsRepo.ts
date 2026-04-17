@@ -180,22 +180,23 @@ function safeNonNegativeStock(v: unknown): number | null {
   return Math.max(0, Math.round(v));
 }
 
-function productLookupForWebhookItem(it: HubStockWebhookPayloadItem):
-  | { sql: string; params: unknown[]; ref: string }
-  | null {
+/**
+ * Intentos en orden: si el ERP manda varios campos, se prueba cada uno hasta encontrar fila.
+ * Así un `id` que no existe en la tienda no bloquea el match por `sku` o `external_tn_id`.
+ */
+function webhookProductLookupAttempts(
+  it: HubStockWebhookPayloadItem
+): Array<{ sql: string; params: unknown[]; ref: string }> {
+  const out: Array<{ sql: string; params: unknown[]; ref: string }> = [];
   const byId = nonEmptyString(it.id);
-  if (byId) return { sql: 'id = ?', params: [byId], ref: `id:${byId}` };
-
+  if (byId) out.push({ sql: 'id = ?', params: [byId], ref: `id:${byId}` });
   const bySku = nonEmptyString(it.sku);
-  if (bySku) return { sql: 'sku = ?', params: [bySku], ref: `sku:${bySku}` };
-
+  if (bySku) out.push({ sql: 'sku = ?', params: [bySku], ref: `sku:${bySku}` });
   const byTn = nonEmptyString(it.external_tn_id);
-  if (byTn) return { sql: 'external_tn_id = ?', params: [byTn], ref: `external_tn_id:${byTn}` };
-
+  if (byTn) out.push({ sql: 'external_tn_id = ?', params: [byTn], ref: `external_tn_id:${byTn}` });
   const byMl = nonEmptyString(it.external_ml_id);
-  if (byMl) return { sql: 'external_ml_id = ?', params: [byMl], ref: `external_ml_id:${byMl}` };
-
-  return null;
+  if (byMl) out.push({ sql: 'external_ml_id = ?', params: [byMl], ref: `external_ml_id:${byMl}` });
+  return out;
 }
 
 /** Upsert parcial desde Lupo Hub (stock / precio / IDs externos). */
@@ -263,8 +264,9 @@ export async function upsertProductsFromHub(items: HubProductPayload[]): Promise
 
 /**
  * Webhook de stock desde ERP/Lupo Hub.
- * Permite identificar producto por id, sku, external_tn_id o external_ml_id.
- * Opcionalmente permite actualizar una variante puntual con variant_id / variant_sku.
+ * Identificación del producto: se prueba, en orden, cada campo no vacío entre
+ * id → sku → external_tn_id → external_ml_id hasta encontrar una fila.
+ * Opcionalmente: variant_id / variant_sku para tocar una variante en variants_json.
  */
 export async function applyStockWebhookFromHub(
   items: HubStockWebhookPayloadItem[]
@@ -291,8 +293,8 @@ export async function applyStockWebhookFromHub(
         continue;
       }
 
-      const lookup = productLookupForWebhookItem(it);
-      if (!lookup) {
+      const attempts = webhookProductLookupAttempts(it);
+      if (attempts.length === 0) {
         result.invalid.push({
           index,
           reason: 'Falta identificador. Enviá id, sku, external_tn_id o external_ml_id.',
@@ -300,16 +302,26 @@ export async function applyStockWebhookFromHub(
         continue;
       }
 
-      const [rows] = await conn.query<RowDataPacket[]>(
-        `SELECT id, sku, name, price, stock_quantity, image, category, description,
-                external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json, images_json
-         FROM products
-         WHERE ${lookup.sql}
-         LIMIT 1`,
-        lookup.params
-      );
+      let rows: RowDataPacket[] = [];
+      for (const lookup of attempts) {
+        const [r] = await conn.query<RowDataPacket[]>(
+          `SELECT id, sku, name, price, stock_quantity, image, category, description,
+                  external_id, external_tn_id, external_ml_id, source, sync_source, hub_synced_at, variants_json, images_json
+           FROM products
+           WHERE ${lookup.sql}
+           LIMIT 1`,
+          lookup.params
+        );
+        if (r.length) {
+          rows = r;
+          break;
+        }
+      }
       if (!rows.length) {
-        result.notFound.push({ index, ref: lookup.ref });
+        result.notFound.push({
+          index,
+          ref: attempts.map((a) => a.ref).join(' | '),
+        });
         continue;
       }
 

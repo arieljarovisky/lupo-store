@@ -100,6 +100,11 @@ hubRouter.post(
       invalid: sync.invalid.length,
       notFound: sync.notFound.length,
     });
+    if (sync.notFound.length > 0) {
+      hubLog('webhook/stock: búsquedas sin fila en DB', {
+        refs: sync.notFound.map((n) => n.ref),
+      });
+    }
 
     if (webhookId) {
       await markHubWebhookEventDone(webhookId);

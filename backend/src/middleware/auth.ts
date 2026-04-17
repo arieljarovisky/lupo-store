@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyToken } from '../auth/jwt.js';
 import type { AdminJwtPayload } from '../types.js';
+import { hubLog } from '../logger.js';
 import { reserveHubWebhookEvent } from '../repos/hubWebhookEventsRepo.js';
 
 export function optionalCustomerAuth(req: Request, _res: Response, next: NextFunction): void {
@@ -47,11 +48,13 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
 export function requireHubKey(req: Request, res: Response, next: NextFunction): void {
   const key = process.env.HUB_API_KEY?.trim();
   if (!key) {
+    hubLog('reject: HUB_API_KEY no configurada');
     res.status(503).json({ error: 'HUB_API_KEY no configurada en el servidor.' });
     return;
   }
   const sent = req.header('x-hub-api-key');
   if (sent !== key) {
+    hubLog('reject: API key inválida', { path: req.originalUrl });
     res.status(401).json({ error: 'API key inválida.' });
     return;
   }
@@ -93,6 +96,7 @@ function constantTimeEqualHex(a: string, b: string): boolean {
 export function requireHubWebhookSignature(req: Request, res: Response, next: NextFunction): void {
   const secret = process.env.HUB_WEBHOOK_SECRET?.trim();
   if (!secret) {
+    hubLog('reject: HUB_WEBHOOK_SECRET no configurada');
     res.status(503).json({ error: 'HUB_WEBHOOK_SECRET no configurada en el servidor.' });
     return;
   }
@@ -100,12 +104,14 @@ export function requireHubWebhookSignature(req: Request, res: Response, next: Ne
   const timestampRaw = String(req.header('x-hub-timestamp') ?? '').trim();
   const signatureRaw = String(req.header('x-hub-signature') ?? '').trim();
   if (!timestampRaw || !signatureRaw) {
+    hubLog('reject: faltan timestamp/signature', { path: req.originalUrl });
     res.status(401).json({ error: 'Faltan headers x-hub-timestamp/x-hub-signature.' });
     return;
   }
 
   const tsNum = Number(timestampRaw);
   if (!Number.isFinite(tsNum)) {
+    hubLog('reject: timestamp inválido');
     res.status(401).json({ error: 'x-hub-timestamp inválido.' });
     return;
   }
@@ -113,6 +119,7 @@ export function requireHubWebhookSignature(req: Request, res: Response, next: Ne
   const nowSec = Math.floor(Date.now() / 1000);
   const maxSkew = Math.max(1, Number(process.env.HUB_WEBHOOK_MAX_SKEW_SECONDS ?? 300));
   if (Math.abs(nowSec - tsSec) > maxSkew) {
+    hubLog('reject: timestamp fuera de ventana', { skewSec: Math.abs(nowSec - tsSec), maxSkew });
     res.status(401).json({ error: 'Webhook expirado o fuera de ventana horaria.' });
     return;
   }
@@ -121,6 +128,7 @@ export function requireHubWebhookSignature(req: Request, res: Response, next: Ne
     ? signatureRaw.slice(7).trim().toLowerCase()
     : signatureRaw.toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(provided)) {
+    hubLog('reject: formato de firma inválido');
     res.status(401).json({ error: 'x-hub-signature inválida.' });
     return;
   }
@@ -129,6 +137,7 @@ export function requireHubWebhookSignature(req: Request, res: Response, next: Ne
   const signedPayload = `${String(tsSec)}.${bodyCanonical}`;
   const expected = createHmac('sha256', secret).update(signedPayload).digest('hex').toLowerCase();
   if (!constantTimeEqualHex(provided, expected)) {
+    hubLog('reject: firma HMAC no coincide (revisá canonical JSON y HUB_WEBHOOK_SECRET)');
     res.status(401).json({ error: 'Firma HMAC inválida.' });
     return;
   }
@@ -147,10 +156,12 @@ export async function requireHubWebhookIdempotency(
 ): Promise<void> {
   const idRaw = String(req.header('x-webhook-id') ?? req.header('x-idempotency-key') ?? '').trim();
   if (!idRaw) {
+    hubLog('reject: falta x-webhook-id', { path: req.originalUrl });
     res.status(400).json({ error: 'Falta header x-webhook-id (o x-idempotency-key).' });
     return;
   }
   if (!/^[A-Za-z0-9:_\-\.]{8,128}$/.test(idRaw)) {
+    hubLog('reject: x-webhook-id inválido', { path: req.originalUrl });
     res.status(400).json({ error: 'x-webhook-id inválido (8-128, alfanumérico + :_-.).' });
     return;
   }
@@ -168,12 +179,14 @@ export async function requireHubWebhookIdempotency(
 
     if (reservation.kind === 'duplicate_done') {
       if (!reservation.hashMatches) {
+        hubLog('idempotency: conflicto payload distinto', { webhook_id: idRaw });
         res.status(409).json({
           error: 'x-webhook-id ya fue usado con otro payload.',
           webhook_id: idRaw,
         });
         return;
       }
+      hubLog('idempotency: duplicado (no se re-aplica stock)', { webhook_id: idRaw });
       res.status(200).json({
         ok: true,
         duplicate: true,
@@ -185,12 +198,14 @@ export async function requireHubWebhookIdempotency(
 
     if (reservation.kind === 'duplicate_processing') {
       if (!reservation.hashMatches) {
+        hubLog('idempotency: procesamiento con otro payload', { webhook_id: idRaw });
         res.status(409).json({
           error: 'x-webhook-id en procesamiento con payload distinto.',
           webhook_id: idRaw,
         });
         return;
       }
+      hubLog('idempotency: ya en procesamiento', { webhook_id: idRaw });
       res.status(409).json({
         error: 'x-webhook-id ya está en procesamiento. Reintentá en unos segundos.',
         webhook_id: idRaw,

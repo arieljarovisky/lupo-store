@@ -14,9 +14,22 @@ import {
   markHubWebhookEventDone,
   releaseHubWebhookEventReservation,
 } from '../repos/hubWebhookEventsRepo.js';
+import { hubLog } from '../logger.js';
 
 export const hubRouter = Router();
 hubRouter.use(requireHubKey);
+
+/** Trazas: si no ves `[hub]` en Railway, el request no llega a este router (URL/CORS/proxy). */
+hubRouter.use((req, _res, next) => {
+  if (req.path.includes('webhook')) {
+    hubLog(`→ ${req.method} ${req.path}`, {
+      webhook_id: req.header('x-webhook-id') ?? null,
+      has_ts: Boolean(req.header('x-hub-timestamp')),
+      has_sig: Boolean(req.header('x-hub-signature')),
+    });
+  }
+  next();
+});
 
 /** Sincronización desde Lupo Hub (stock, precios, IDs ML/TN). */
 hubRouter.post('/products', async (req, res) => {
@@ -65,6 +78,7 @@ hubRouter.post(
         : [];
 
     if (updates.length === 0) {
+      hubLog('webhook/stock: body vacío o sin updates');
       res.status(400).json({
         error:
           'Enviá un array o { updates: [...] } con stock_quantity e identificador (id, sku, external_tn_id o external_ml_id).',
@@ -72,13 +86,36 @@ hubRouter.post(
       return;
     }
 
+    hubLog('webhook/stock: procesando', {
+      webhook_id: webhookId ?? null,
+      items: updates.length,
+    });
+
     const sync = await applyStockWebhookFromHub(updates);
+
+    hubLog('webhook/stock: resultado', {
+      updated: sync.updated,
+      variantUpdated: sync.variantUpdated,
+      received: sync.received,
+      invalid: sync.invalid.length,
+      notFound: sync.notFound.length,
+    });
+
     if (webhookId) {
       await markHubWebhookEventDone(webhookId);
     }
+
+    const hint =
+      sync.updated === 0 && sync.notFound.length > 0
+        ? 'Ningún ítem coincidió en la DB (sku/id distintos o productos sin importar). Revisá catálogo y reimport desde Tienda Nube.'
+        : sync.updated === 0 && sync.invalid.length > 0
+          ? 'Todos los ítems fueron inválidos. Revisá stock_quantity e identificadores en el payload.'
+          : undefined;
+
     res.json({
       ok: true,
       webhook_id: webhookId ?? null,
+      ...(hint ? { hint } : {}),
       ...sync,
     });
   } catch (e) {
@@ -88,6 +125,7 @@ hubRouter.post(
         /* noop */
       });
     }
+    hubLog('webhook/stock: error', { message: e instanceof Error ? e.message : String(e) });
     console.error(e);
     res.status(500).json({ error: 'Error al procesar webhook de stock.' });
   }

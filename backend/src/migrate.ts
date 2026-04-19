@@ -84,6 +84,10 @@ export async function runMigrations(p: Pool): Promise<void> {
       customer_id BIGINT UNSIGNED DEFAULT NULL,
       guest_email VARCHAR(320) DEFAULT NULL,
       guest_phone VARCHAR(32) DEFAULT NULL,
+      payment_method VARCHAR(32) NOT NULL DEFAULT 'cash',
+      installments INT NOT NULL DEFAULT 1,
+      installment_interest_rate DECIMAL(5,4) NOT NULL DEFAULT 0,
+      payment_reference VARCHAR(255) DEFAULT NULL,
       status VARCHAR(32) NOT NULL DEFAULT 'pending',
       payment_status VARCHAR(32) NOT NULL DEFAULT 'unpaid',
       subtotal INT NOT NULL,
@@ -191,6 +195,30 @@ export async function runMigrations(p: Pool): Promise<void> {
     'products',
     'images_json',
     '`images_json` LONGTEXT DEFAULT NULL'
+  );
+  await addColumn(
+    p,
+    'orders',
+    'payment_method',
+    "`payment_method` VARCHAR(32) NOT NULL DEFAULT 'cash' AFTER `guest_phone`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'installments',
+    '`installments` INT NOT NULL DEFAULT 1 AFTER `payment_method`'
+  );
+  await addColumn(
+    p,
+    'orders',
+    'installment_interest_rate',
+    '`installment_interest_rate` DECIMAL(5,4) NOT NULL DEFAULT 0 AFTER `installments`'
+  );
+  await addColumn(
+    p,
+    'orders',
+    'payment_reference',
+    '`payment_reference` VARCHAR(255) DEFAULT NULL AFTER `installment_interest_rate`'
   );
 
   await p.query(

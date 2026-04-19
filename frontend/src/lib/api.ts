@@ -1,5 +1,7 @@
 import type { Product } from '../context/CartContext';
 
+export type CheckoutPaymentMethod = 'mercado_pago' | 'card' | 'bank_transfer' | 'cash';
+
 /**
  * Sin `https://` o `http://`, `fetch` interpreta el valor como ruta relativa al sitio actual
  * (p. ej. `mi-app.vercel.app/tu-dominio.railway.app/api/...` → 404/HTML).
@@ -265,6 +267,10 @@ export interface AdminOrder {
   customerId: number | null;
   guestEmail: string | null;
   guestPhone: string | null;
+  paymentMethod: CheckoutPaymentMethod;
+  installments: number;
+  installmentInterestRate: number;
+  paymentReference: string | null;
   status: string;
   paymentStatus: string;
   subtotal: number;
@@ -279,6 +285,84 @@ export interface AdminOrder {
     quantity: number;
     lineTotal: number;
   }>;
+}
+
+export async function createCheckoutOrder(params: {
+  items: { productId: string; quantity: number }[];
+  guestEmail: string;
+  guestPhone: string;
+  notes?: string;
+  paymentMethod: CheckoutPaymentMethod;
+  installments?: number;
+}): Promise<{ ok: true; orderId: number; checkoutUrl: string | null } | { ok: false; error: string }> {
+  const base = apiBase();
+  const url = base ? `${base}/api/orders/checkout` : '/api/orders/checkout';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const text = await res.text();
+    let data: { ok?: boolean; orderId?: number; checkoutUrl?: string | null; error?: string } = {};
+    try {
+      data = JSON.parse(text) as typeof data;
+    } catch {
+      return { ok: false, error: apiErrorMessage(res, text) };
+    }
+    if (!res.ok || !data.ok || !data.orderId) {
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return { ok: true, orderId: data.orderId, checkoutUrl: data.checkoutUrl ?? null };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
+export async function payOrderWithMercadoPagoCard(params: {
+  orderId: number;
+  token: string;
+  paymentMethodId: string;
+  issuerId?: string | null;
+  installments: number;
+  payerEmail: string;
+  identificationType?: string | null;
+  identificationNumber?: string | null;
+}): Promise<{ ok: true; paymentStatus: string; orderStatus: string } | { ok: false; error: string }> {
+  const base = apiBase();
+  const url = base
+    ? `${base}/api/orders/${params.orderId}/payments/mercado-pago/card`
+    : `/api/orders/${params.orderId}/payments/mercado-pago/card`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: params.token,
+        paymentMethodId: params.paymentMethodId,
+        issuerId: params.issuerId,
+        installments: params.installments,
+        payerEmail: params.payerEmail,
+        identificationType: params.identificationType,
+        identificationNumber: params.identificationNumber,
+      }),
+    });
+    const text = await res.text();
+    let data: { ok?: boolean; paymentStatus?: string; orderStatus?: string; error?: string } = {};
+    try {
+      data = JSON.parse(text) as typeof data;
+    } catch {
+      return { ok: false, error: apiErrorMessage(res, text) };
+    }
+    if (!res.ok || !data.ok || !data.paymentStatus || !data.orderStatus) {
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return { ok: true, paymentStatus: data.paymentStatus, orderStatus: data.orderStatus };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
 }
 
 export interface AdminCustomerRow {

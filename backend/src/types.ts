@@ -56,6 +56,10 @@ export interface Order {
   customerId: number | null;
   guestEmail: string | null;
   guestPhone: string | null;
+  paymentMethod: PaymentMethod;
+  installments: number;
+  installmentInterestRate: number;
+  paymentReference: string | null;
   status: string;
   paymentStatus: string;
   subtotal: number;
@@ -73,6 +77,8 @@ export interface OrderItem {
   quantity: number;
   lineTotal: number;
 }
+
+export type PaymentMethod = 'mercado_pago' | 'card' | 'bank_transfer' | 'cash';
 
 export interface CustomerJwtPayload {
   typ: 'customer';

@@ -3,6 +3,15 @@ import { Download } from 'lucide-react';
 import { fetchAdminOrders, type AdminOrder } from '../../lib/api';
 import { downloadOrdersCsv } from '../../lib/adminExport';
 
+function paymentMethodLabel(order: AdminOrder): string {
+  if (order.paymentMethod === 'mercado_pago') return 'Mercado Pago';
+  if (order.paymentMethod === 'card') {
+    return order.installments > 1 ? `Tarjeta (${order.installments} cuotas)` : 'Tarjeta (1 cuota)';
+  }
+  if (order.paymentMethod === 'bank_transfer') return 'Transferencia';
+  return 'Efectivo';
+}
+
 export function AdminOrders() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +93,10 @@ export function AdminOrders() {
                 <span>
                   <span className="text-[#888]">Pago: </span>
                   <span className="font-medium">{o.paymentStatus}</span>
+                </span>
+                <span>
+                  <span className="text-[#888]">Método: </span>
+                  <span className="font-medium">{paymentMethodLabel(o)}</span>
                 </span>
                 <span>
                   <span className="text-[#888]">Contacto: </span>

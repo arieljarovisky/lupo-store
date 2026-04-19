@@ -40,6 +40,11 @@ orderRouter.get('/webhooks/mercado-pago', (_req, res) => {
   res.status(200).send('ok');
 });
 
+// Algunos chequeos / simuladores usan HEAD u OPTIONS antes del POST.
+orderRouter.head('/webhooks/mercado-pago', (_req, res) => {
+  res.status(200).end();
+});
+
 orderRouter.post('/webhooks/mercado-pago', async (req, res) => {
   try {
     const paymentId = pickPaymentId(req);

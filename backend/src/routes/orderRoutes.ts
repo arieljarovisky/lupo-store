@@ -3,6 +3,7 @@ import { optionalCustomerAuth } from '../middleware/auth.js';
 import {
   createCheckoutOrder,
   processMercadoPagoCardPayment,
+  quoteCheckoutShipping,
   syncOrderPaymentFromMercadoPago,
 } from '../repos/ordersRepo.js';
 
@@ -91,6 +92,39 @@ orderRouter.post('/webhooks/mercado-pago', async (req, res) => {
 
 orderRouter.use(optionalCustomerAuth);
 
+orderRouter.post('/shipping/quote', async (req, res) => {
+  try {
+    const body = req.body as {
+      items?: { productId?: string; quantity?: number }[];
+      address?: { zipcode?: string; city?: string; province?: string; country?: string };
+    };
+    const items = Array.isArray(body.items)
+      ? body.items
+          .map((it) => ({
+            productId: String(it.productId ?? '').trim(),
+            quantity: Math.max(0, Math.floor(Number(it.quantity ?? 0))),
+          }))
+          .filter((it) => it.productId && it.quantity > 0)
+      : [];
+    const address = body.address ?? {};
+
+    const quote = await quoteCheckoutShipping({
+      items,
+      address: {
+        zipcode: String(address.zipcode ?? ''),
+        city: address.city ? String(address.city) : null,
+        province: address.province ? String(address.province) : null,
+        country: address.country ? String(address.country) : null,
+      },
+    });
+
+    res.status(200).json({ ok: true, ...quote });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'No se pudo calcular el envío.';
+    res.status(400).json({ error: msg });
+  }
+});
+
 orderRouter.post('/:orderId/payments/mercado-pago/card', async (req, res) => {
   try {
     const orderId = Number(req.params.orderId);
@@ -152,6 +186,11 @@ orderRouter.post('/checkout', async (req, res) => {
       notes?: string;
       paymentMethod?: 'mercado_pago' | 'card' | 'bank_transfer' | 'cash';
       installments?: number;
+      shippingCost?: number;
+      shippingLabel?: string;
+      shippingOptionId?: string;
+      shippingProvider?: string;
+      shippingZipcode?: string;
     };
     const items = Array.isArray(body.items) ? body.items : [];
     const customerId = (req as Request & { customerId?: number }).customerId;
@@ -164,6 +203,11 @@ orderRouter.post('/checkout', async (req, res) => {
       customerId: customerId ?? null,
       paymentMethod: body.paymentMethod,
       installments: body.installments,
+      shippingCost: body.shippingCost,
+      shippingLabel: body.shippingLabel,
+      shippingOptionId: body.shippingOptionId,
+      shippingProvider: body.shippingProvider,
+      shippingZipcode: body.shippingZipcode,
     });
 
     res.status(201).json({ ok: true, orderId: result.orderId, checkoutUrl: result.checkoutUrl });

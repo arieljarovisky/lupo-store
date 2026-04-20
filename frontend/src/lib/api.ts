@@ -287,6 +287,61 @@ export interface AdminOrder {
   }>;
 }
 
+export interface CheckoutShippingQuoteOption {
+  id: string;
+  provider: 'tiendanube';
+  carrier: 'correo_argentino';
+  label: string;
+  cost: number;
+  minDays: number;
+  maxDays: number;
+}
+
+export async function quoteCheckoutShipping(params: {
+  items: { productId: string; quantity: number }[];
+  address: { zipcode: string; city?: string; province?: string; country?: string };
+}): Promise<
+  | { ok: true; currency: string; subtotal: number; options: CheckoutShippingQuoteOption[] }
+  | { ok: false; error: string }
+> {
+  const base = apiBase();
+  const url = base ? `${base}/api/orders/shipping/quote` : '/api/orders/shipping/quote';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const text = await res.text();
+    let data:
+      | {
+          ok?: boolean;
+          currency?: string;
+          subtotal?: number;
+          options?: CheckoutShippingQuoteOption[];
+          error?: string;
+        }
+      | undefined;
+    try {
+      data = JSON.parse(text) as typeof data;
+    } catch {
+      return { ok: false, error: apiErrorMessage(res, text) };
+    }
+    if (!res.ok || !data?.ok || !Array.isArray(data.options)) {
+      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    }
+    return {
+      ok: true,
+      currency: String(data.currency ?? 'ARS'),
+      subtotal: Number(data.subtotal ?? 0),
+      options: data.options,
+    };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
 export async function createCheckoutOrder(params: {
   items: { productId: string; quantity: number }[];
   guestEmail: string;
@@ -294,6 +349,11 @@ export async function createCheckoutOrder(params: {
   notes?: string;
   paymentMethod: CheckoutPaymentMethod;
   installments?: number;
+  shippingCost?: number;
+  shippingLabel?: string;
+  shippingOptionId?: string;
+  shippingProvider?: string;
+  shippingZipcode?: string;
 }): Promise<{ ok: true; orderId: number; checkoutUrl: string | null } | { ok: false; error: string }> {
   const base = apiBase();
   const url = base ? `${base}/api/orders/checkout` : '/api/orders/checkout';

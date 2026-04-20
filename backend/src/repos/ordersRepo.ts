@@ -39,6 +39,8 @@ async function createMercadoPagoPreference(params: {
   orderId: number;
   lines: Array<{ name: string; qty: number; unit: number }>;
   guestEmail: string | null;
+  shippingCost?: number;
+  shippingLabel?: string | null;
 }): Promise<{ checkoutUrl: string | null; paymentReference: string | null }> {
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();
   if (!accessToken) {
@@ -48,12 +50,24 @@ async function createMercadoPagoPreference(params: {
   const body = {
     external_reference: String(params.orderId),
     payer: params.guestEmail ? { email: params.guestEmail } : undefined,
-    items: params.lines.map((line) => ({
-      title: line.name,
-      quantity: line.qty,
-      currency_id: 'ARS',
-      unit_price: line.unit,
-    })),
+    items: [
+      ...params.lines.map((line) => ({
+        title: line.name,
+        quantity: line.qty,
+        currency_id: 'ARS',
+        unit_price: line.unit,
+      })),
+      ...(Number(params.shippingCost ?? 0) > 0
+        ? [
+            {
+              title: params.shippingLabel?.trim() || 'Envío',
+              quantity: 1,
+              currency_id: 'ARS',
+              unit_price: Math.round(Number(params.shippingCost)),
+            },
+          ]
+        : []),
+    ],
     back_urls: {
       success: process.env.MERCADO_PAGO_SUCCESS_URL?.trim() || process.env.FRONTEND_URL?.trim() || undefined,
       failure: process.env.MERCADO_PAGO_FAILURE_URL?.trim() || process.env.FRONTEND_URL?.trim() || undefined,
@@ -86,6 +100,100 @@ async function createMercadoPagoPreference(params: {
   };
 }
 
+export interface CheckoutShippingQuoteOption {
+  id: string;
+  provider: 'tiendanube';
+  carrier: 'correo_argentino';
+  label: string;
+  cost: number;
+  minDays: number;
+  maxDays: number;
+}
+
+function normalizeZipcode(raw: string): string {
+  const t = raw.trim().toUpperCase();
+  if (!t) return '';
+  return t.replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * Cotización local compatible con flujo de Tienda Nube + Correo Argentino.
+ * Se basa en CP y subtotal para ofrecer estándar/exprés y envío gratis configurable.
+ */
+export async function quoteCheckoutShipping(params: {
+  items: { productId: string; quantity: number }[];
+  address: { zipcode: string; city?: string | null; province?: string | null; country?: string | null };
+}): Promise<{ currency: 'ARS'; subtotal: number; options: CheckoutShippingQuoteOption[] }> {
+  const zipcode = normalizeZipcode(params.address.zipcode);
+  if (zipcode.length < 4) {
+    throw new Error('Ingresá un código postal válido para calcular el envío.');
+  }
+  if (params.items.length === 0) {
+    throw new Error('El carrito está vacío.');
+  }
+
+  let subtotal = 0;
+  for (const it of params.items) {
+    const qty = Math.max(0, Math.floor(Number(it.quantity)));
+    if (qty <= 0) continue;
+    const prod = await getProductById(String(it.productId));
+    if (!prod) {
+      throw new Error(`Producto no encontrado: ${it.productId}`);
+    }
+    subtotal += qty * Math.round(Number(prod.price) || 0);
+  }
+
+  const freeOver = Math.max(0, Math.round(Number(process.env.SHIPPING_FREE_OVER_ARS ?? '0') || 0));
+  const digits = zipcode.replace(/\D/g, '');
+  const prefix2 = digits.slice(0, 2);
+  const ambaPrefixes = new Set(['10', '11', '12', '13', '14', '15', '16', '17', '18', '19']);
+  const isAmba = prefix2.length === 2 && ambaPrefixes.has(prefix2);
+
+  const standardCost = isAmba ? 4500 : 6900;
+  const expressCost = isAmba ? 6500 : 9800;
+  const standardDays = isAmba ? { min: 2, max: 4 } : { min: 3, max: 6 };
+  const expressDays = isAmba ? { min: 1, max: 2 } : { min: 2, max: 4 };
+
+  const options: CheckoutShippingQuoteOption[] = [];
+  if (freeOver > 0 && subtotal >= freeOver) {
+    options.push({
+      id: 'correo_argentino_free',
+      provider: 'tiendanube',
+      carrier: 'correo_argentino',
+      label: 'Correo Argentino (Tienda Nube) - Envío gratis',
+      cost: 0,
+      minDays: standardDays.min,
+      maxDays: standardDays.max,
+    });
+  }
+  options.push(
+    {
+      id: 'correo_argentino_standard',
+      provider: 'tiendanube',
+      carrier: 'correo_argentino',
+      label: 'Correo Argentino (Tienda Nube) - Clásico a domicilio',
+      cost: standardCost,
+      minDays: standardDays.min,
+      maxDays: standardDays.max,
+    },
+    {
+      id: 'correo_argentino_express',
+      provider: 'tiendanube',
+      carrier: 'correo_argentino',
+      label: 'Correo Argentino (Tienda Nube) - Expreso a domicilio',
+      cost: expressCost,
+      minDays: expressDays.min,
+      maxDays: expressDays.max,
+    }
+  );
+
+  return {
+    currency: 'ARS',
+    subtotal,
+    options,
+  };
+}
+
 export async function createCheckoutOrder(params: {
   items: { productId: string; quantity: number }[];
   guestEmail?: string | null;
@@ -94,6 +202,11 @@ export async function createCheckoutOrder(params: {
   customerId?: number | null;
   paymentMethod?: string;
   installments?: number;
+  shippingCost?: number;
+  shippingLabel?: string | null;
+  shippingOptionId?: string | null;
+  shippingProvider?: string | null;
+  shippingZipcode?: string | null;
 }): Promise<{ orderId: number; checkoutUrl: string | null }> {
   const email = params.guestEmail?.trim() || null;
   const phone = params.guestPhone?.trim() || null;
@@ -113,6 +226,11 @@ export async function createCheckoutOrder(params: {
    */
   const interestRate =
     paymentMethod === 'card' ? 0 : INSTALLMENT_INTEREST_RATE[installments] ?? 0;
+  const shippingCost = Math.max(0, Math.round(Number(params.shippingCost ?? 0) || 0));
+  const shippingLabel = params.shippingLabel?.trim() || null;
+  const shippingOptionId = params.shippingOptionId?.trim() || null;
+  const shippingProvider = params.shippingProvider?.trim() || null;
+  const shippingZipcode = params.shippingZipcode?.trim() || null;
 
   const p = await getPool();
   const conn = await p.getConnection();
@@ -153,7 +271,18 @@ export async function createCheckoutOrder(params: {
       });
     }
 
-    const total = roundCurrency(subtotal * (1 + interestRate));
+    const baseWithShipping = subtotal + shippingCost;
+    const total = roundCurrency(baseWithShipping * (1 + interestRate));
+    const shippingNotes = [
+      shippingLabel ? `Envío: ${shippingLabel}` : null,
+      shippingOptionId ? `Envío opción: ${shippingOptionId}` : null,
+      shippingProvider ? `Envío proveedor: ${shippingProvider}` : null,
+      shippingZipcode ? `Envío CP: ${shippingZipcode}` : null,
+      `Envío costo: ARS ${shippingCost}`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const notes = [params.notes?.trim() || null, shippingNotes].filter(Boolean).join('\n');
     const [ins] = await conn.query<ResultSetHeader>(
       `INSERT INTO orders (
         customer_id, guest_email, guest_phone, payment_method, installments, installment_interest_rate,
@@ -170,7 +299,7 @@ export async function createCheckoutOrder(params: {
         resolvePaymentStatus(paymentMethod),
         subtotal,
         total,
-        params.notes?.trim() || null,
+        notes || null,
       ]
     );
     orderId = Number(ins.insertId);
@@ -192,6 +321,8 @@ export async function createCheckoutOrder(params: {
         orderId,
         lines,
         guestEmail: email,
+        shippingCost,
+        shippingLabel,
       });
       checkoutUrl = preference.checkoutUrl;
       if (preference.paymentReference) {

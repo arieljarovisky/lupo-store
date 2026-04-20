@@ -14,7 +14,9 @@ import {
 import {
   createCheckoutOrder,
   payOrderWithMercadoPagoCard,
+  quoteCheckoutShipping,
   type CheckoutPaymentMethod,
+  type CheckoutShippingQuoteOption,
 } from '../lib/api';
 
 function paymentLabel(method: CheckoutPaymentMethod): string {
@@ -136,10 +138,20 @@ export function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>('mercado_pago');
   const [cardFormReady, setCardFormReady] = useState(false);
   const [issuerDisplayName, setIssuerDisplayName] = useState('Banco emisor');
+  const [shippingZipcode, setShippingZipcode] = useState('');
+  const [shippingCity, setShippingCity] = useState('');
+  const [shippingProvince, setShippingProvince] = useState('');
+  const [shippingOptions, setShippingOptions] = useState<CheckoutShippingQuoteOption[]>([]);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState<string | null>(null);
+  const [selectedShippingId, setSelectedShippingId] = useState<string | null>(null);
   const cardFormRef = useRef<MercadoPagoCardFormInstance | null>(null);
   const mpPublicKey = import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY?.trim() || '';
 
-  const paymentTotal = cartTotal;
+  const selectedShipping =
+    shippingOptions.find((option) => option.id === selectedShippingId) ?? shippingOptions[0] ?? null;
+  const shippingCost = selectedShipping?.cost ?? 0;
+  const paymentTotal = cartTotal + shippingCost;
 
   const unmountCardFormSafely = useCallback(() => {
     const cf = cardFormRef.current;
@@ -171,6 +183,10 @@ export function Checkout() {
       setError('Completá los datos de contacto y envío antes de pagar con tarjeta.');
       return;
     }
+    if (!selectedShipping) {
+      setError('Completá ciudad y código postal para calcular y elegir un envío antes de pagar.');
+      return;
+    }
 
     const paymentNotes = `Cliente: ${firstName} ${lastName}\nDirección: ${address}, ${city} (${zip})`;
 
@@ -183,6 +199,11 @@ export function Checkout() {
       notes: paymentNotes,
       paymentMethod: 'card',
       installments: Number(cardData.installments || '1'),
+      shippingCost: selectedShipping.cost,
+      shippingLabel: selectedShipping.label,
+      shippingOptionId: selectedShipping.id,
+      shippingProvider: selectedShipping.provider,
+      shippingZipcode: zip,
     });
     if ('error' in orderResult) {
       setIsSubmitting(false);
@@ -354,6 +375,49 @@ export function Checkout() {
     };
   }, [paymentMethod, cardFormReady]);
 
+  useEffect(() => {
+    const zipcode = shippingZipcode.trim();
+    const city = shippingCity.trim();
+    if (items.length === 0 || zipcode.length < 4 || city.length < 2) {
+      setShippingOptions([]);
+      setSelectedShippingId(null);
+      setShippingLoading(false);
+      setShippingError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setShippingLoading(true);
+    setShippingError(null);
+
+    const timer = window.setTimeout(async () => {
+      const r = await quoteCheckoutShipping({
+        items: items.map((item) => ({ productId: item.id, quantity: item.quantity })),
+        address: {
+          zipcode,
+          city,
+          province: shippingProvince.trim() || undefined,
+          country: 'AR',
+        },
+      });
+      if (cancelled) return;
+      setShippingLoading(false);
+      if ('error' in r) {
+        setShippingOptions([]);
+        setSelectedShippingId(null);
+        setShippingError(r.error);
+        return;
+      }
+      setShippingOptions(r.options);
+      setSelectedShippingId((prev) => (prev && r.options.some((o) => o.id === prev) ? prev : (r.options[0]?.id ?? null)));
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [items, shippingZipcode, shippingCity, shippingProvince]);
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (paymentMethod === 'card') {
@@ -373,6 +437,11 @@ export function Checkout() {
     const address = String(formData.get('address') || '').trim();
     const city = String(formData.get('city') || '').trim();
     const zip = String(formData.get('zip') || '').trim();
+    if (!selectedShipping) {
+      setIsSubmitting(false);
+      setError('Completá ciudad y código postal para calcular y elegir un envío antes de confirmar.');
+      return;
+    }
     const paymentNotes = `Cliente: ${firstName} ${lastName}\nDirección: ${address}, ${city} (${zip})`;
 
     const result = await createCheckoutOrder({
@@ -382,6 +451,11 @@ export function Checkout() {
       notes: paymentNotes,
       paymentMethod,
       installments: 1,
+      shippingCost: selectedShipping.cost,
+      shippingLabel: selectedShipping.label,
+      shippingOptionId: selectedShipping.id,
+      shippingProvider: selectedShipping.provider,
+      shippingZipcode: zip,
     });
 
     setIsSubmitting(false);
@@ -555,6 +629,8 @@ export function Checkout() {
                     id="city" 
                     required
                     className={inputClass}
+                    value={shippingCity}
+                    onChange={(e) => setShippingCity(e.target.value)}
                   />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
@@ -565,9 +641,82 @@ export function Checkout() {
                     id="zip" 
                     required
                     className={inputClass}
+                    value={shippingZipcode}
+                    onChange={(e) => setShippingZipcode(e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label htmlFor="province" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">Provincia (opcional)</label>
+                  <input
+                    type="text"
+                    name="province"
+                    id="province"
+                    className={inputClass}
+                    value={shippingProvince}
+                    onChange={(e) => setShippingProvince(e.target.value)}
                   />
                 </div>
               </div>
+            </section>
+
+            <section className="rounded-2xl border border-lupo-border bg-white p-6 md:p-8 shadow-sm">
+              <h2 className="text-[11px] uppercase tracking-[2px] font-semibold text-lupo-muted mb-1">
+                Paso 2.5
+              </h2>
+              <h3 className="text-[20px] font-medium mb-2 text-lupo-black">Envío</h3>
+              <p className="text-[13px] text-lupo-text mb-5">
+                Calculamos opciones de Correo Argentino (integración Tienda Nube) según tu dirección.
+              </p>
+
+              {shippingZipcode.trim().length < 4 || shippingCity.trim().length < 2 ? (
+                <div className="rounded-lg border border-lupo-border bg-lupo-gray/40 px-4 py-3 text-[13px] text-lupo-text">
+                  Completá ciudad y código postal para calcular el costo de envío.
+                </div>
+              ) : shippingLoading ? (
+                <div className="flex items-center gap-2 rounded-lg border border-lupo-border bg-lupo-gray/40 px-4 py-3 text-[13px] text-lupo-text">
+                  <Loader2 size={16} className="animate-spin" />
+                  Calculando opciones de envío…
+                </div>
+              ) : shippingError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">
+                  {shippingError}
+                </div>
+              ) : shippingOptions.length === 0 ? (
+                <div className="rounded-lg border border-lupo-border bg-lupo-gray/40 px-4 py-3 text-[13px] text-lupo-text">
+                  No hay opciones disponibles para esa dirección.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {shippingOptions.map((option) => {
+                    const active = selectedShipping?.id === option.id;
+                    return (
+                      <label
+                        key={option.id}
+                        className={`block cursor-pointer rounded-xl border px-4 py-3 transition-colors ${
+                          active ? 'border-lupo-black bg-[#fafafa]' : 'border-lupo-border bg-white hover:border-[#cfcfcf]'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="shippingOption"
+                          className="sr-only"
+                          checked={active}
+                          onChange={() => setSelectedShippingId(option.id)}
+                        />
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[14px] text-lupo-black">{option.label}</span>
+                          <span className="font-medium text-[14px] text-lupo-black">
+                            ${option.cost.toFixed(2)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[12px] text-lupo-text">
+                          Entrega estimada: {option.minDays} a {option.maxDays} días hábiles.
+                        </p>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             {/* Payment Info */}
@@ -847,7 +996,9 @@ export function Checkout() {
               </div>
               <div className="flex justify-between text-[13px]">
                 <span className="text-lupo-text">Envío</span>
-                <span className="font-medium text-[#2E7D32]">Gratis</span>
+                <span className={`font-medium tabular-nums ${shippingCost <= 0 ? 'text-[#2E7D32]' : 'text-lupo-black'}`}>
+                  {shippingLoading ? 'Calculando…' : `$${shippingCost.toFixed(2)}`}
+                </span>
               </div>
               <div className="flex justify-between text-[13px]">
                 <span className="text-lupo-text">Impuestos</span>

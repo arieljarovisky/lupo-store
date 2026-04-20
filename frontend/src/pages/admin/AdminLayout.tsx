@@ -111,13 +111,13 @@ export function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] flex">
-      <aside className="hidden lg:flex flex-col w-[260px] bg-lupo-black text-white shrink-0">
-        <div className="p-6 border-b border-white/10">
+    <div className="min-h-screen bg-[#f5f5f5]">
+      <aside className="hidden lg:flex flex-col fixed left-0 top-0 z-20 h-screen w-[260px] bg-lupo-black text-white">
+        <div className="p-6 border-b border-white/10 shrink-0">
           <p className="text-[10px] uppercase tracking-[2px] text-white/60">Lupo</p>
           <p className="text-[18px] font-medium tracking-wide mt-1">Administración</p>
         </div>
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1">
           {nav.map(({ to, label, end, icon: Icon }) => (
             <NavLink
               key={to}
@@ -134,7 +134,7 @@ export function AdminLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="p-4 border-t border-white/10">
+        <div className="p-4 border-t border-white/10 shrink-0">
           <button
             type="button"
             onClick={handleLogout}
@@ -146,7 +146,7 @@ export function AdminLayout() {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex flex-col min-w-0 min-h-screen lg:ml-[260px]">
         <header className="lg:hidden flex items-center justify-between bg-lupo-black text-white px-4 py-3">
           <span className="text-[13px] font-medium uppercase tracking-[1px]">Admin</span>
           <button

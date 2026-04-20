@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { requireAdmin } from '../middleware/auth.js';
-import { listOrdersForAdmin } from '../repos/ordersRepo.js';
+import { cancelOrderAndRestoreStock, listOrdersForAdmin } from '../repos/ordersRepo.js';
 import { updateProductOrVariantPrice } from '../repos/productsRepo.js';
 import { getPool } from '../pool.js';
 
@@ -32,6 +32,21 @@ adminRouter.get('/orders', async (_req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'No se pudieron listar los pedidos.' });
+  }
+});
+
+adminRouter.post('/orders/:orderId/cancel', async (req, res) => {
+  try {
+    const orderId = Number(req.params.orderId);
+    if (!Number.isFinite(orderId) || orderId <= 0) {
+      res.status(400).json({ error: 'Pedido inválido.' });
+      return;
+    }
+    await cancelOrderAndRestoreStock(orderId);
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'No se pudo cancelar el pedido.';
+    res.status(400).json({ error: msg });
   }
 });
 

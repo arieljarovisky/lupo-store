@@ -1,7 +1,7 @@
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';
 import { getPool } from '../pool.js';
-import { getProductById } from './productsRepo.js';
+import { getProductById, restoreStockForCancelledOrderLine } from './productsRepo.js';
 import type { Order, OrderItem, PaymentMethod } from '../types.js';
 
 const INSTALLMENT_INTEREST_RATE: Record<number, number> = {
@@ -396,6 +396,49 @@ export async function syncOrderPaymentFromMercadoPago(params: {
     orderId,
     paymentStatus: nextPaymentStatus,
   };
+}
+
+export async function cancelOrderAndRestoreStock(orderId: number): Promise<void> {
+  const p = await getPool();
+  const conn = await p.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [orderRows] = await conn.query<RowDataPacket[]>(
+      `SELECT id, status FROM orders WHERE id = ? LIMIT 1`,
+      [orderId]
+    );
+    if (!orderRows.length) {
+      throw new Error('Pedido no encontrado.');
+    }
+    if (String(orderRows[0].status) === 'cancelled') {
+      throw new Error('El pedido ya está cancelado.');
+    }
+
+    const [itemRows] = await conn.query<RowDataPacket[]>(
+      `SELECT product_id, quantity FROM order_items WHERE order_id = ?`,
+      [orderId]
+    );
+    for (const it of itemRows) {
+      await restoreStockForCancelledOrderLine(conn, String(it.product_id), Number(it.quantity));
+    }
+
+    await conn.query(
+      `UPDATE orders SET status = 'cancelled',
+         payment_status = CASE
+           WHEN payment_status = 'paid' THEN 'refunded'
+           ELSE 'failed'
+         END
+       WHERE id = ?`,
+      [orderId]
+    );
+
+    await conn.commit();
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
 }
 
 export async function listOrdersForAdmin(limit = 100): Promise<Order[]> {

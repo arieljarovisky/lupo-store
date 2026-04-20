@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
-import { fetchAdminOrders, type AdminOrder } from '../../lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { Download, Ban } from 'lucide-react';
+import { adminCancelOrder, fetchAdminOrders, type AdminOrder } from '../../lib/api';
 import { downloadOrdersCsv } from '../../lib/adminExport';
 
 function paymentMethodLabel(order: AdminOrder): string {
@@ -16,12 +16,13 @@ export function AdminOrders() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const reloadOrders = useCallback(() => {
     setLoading(true);
+    setError(null);
     fetchAdminOrders().then((r) => {
-      if (cancelled) return;
       setLoading(false);
       if (r.ok === false) {
         setOrders([]);
@@ -31,10 +32,26 @@ export function AdminOrders() {
       setOrders(r.orders);
       setError(null);
     });
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    reloadOrders();
+  }, [reloadOrders]);
+
+  const handleCancelOrder = async (orderId: number) => {
+    if (!window.confirm('¿Cancelar este pedido? Se restaurará el stock de los productos.')) {
+      return;
+    }
+    setCancelError(null);
+    setCancellingId(orderId);
+    const r = await adminCancelOrder(orderId);
+    setCancellingId(null);
+    if ('error' in r) {
+      setCancelError(r.error);
+      return;
+    }
+    reloadOrders();
+  };
 
   return (
     <div className="space-y-8">
@@ -57,6 +74,7 @@ export function AdminOrders() {
 
       {loading && <p className="text-[14px] text-lupo-text">Cargando…</p>}
       {error && <p className="text-[14px] text-red-600">{error}</p>}
+      {cancelError && <p className="text-[14px] text-red-600">{cancelError}</p>}
 
       {!loading && !error && orders.length === 0 && (
         <div className="bg-white border border-[#e8e8e8] p-12 text-center text-[14px] text-lupo-text">
@@ -69,9 +87,22 @@ export function AdminOrders() {
           {orders.map((o) => (
             <article key={o.id} className="bg-white border border-[#e8e8e8] overflow-hidden">
               <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4 border-b border-[#f0f0f0] bg-[#fafafa]">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[1.5px] text-[#888]">Pedido</p>
-                  <p className="text-[18px] font-medium text-lupo-black">#{o.id}</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[1.5px] text-[#888]">Pedido</p>
+                    <p className="text-[18px] font-medium text-lupo-black">#{o.id}</p>
+                  </div>
+                  {o.status !== 'cancelled' && (
+                    <button
+                      type="button"
+                      onClick={() => handleCancelOrder(o.id)}
+                      disabled={cancellingId === o.id}
+                      className="inline-flex items-center gap-1.5 border border-red-700 text-red-700 bg-white px-3 py-2 text-[11px] uppercase tracking-wide font-semibold hover:bg-red-700 hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      <Ban size={14} strokeWidth={1.5} />
+                      {cancellingId === o.id ? 'Cancelando…' : 'Cancelar pedido'}
+                    </button>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-[13px] text-lupo-text">

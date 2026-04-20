@@ -373,6 +373,37 @@ export interface AdminCustomerRow {
   created_at: string;
 }
 
+export async function adminCancelOrder(
+  orderId: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const base = apiBase();
+  const url = base
+    ? `${base}/api/admin/orders/${orderId}/cancel`
+    : `/api/admin/orders/${orderId}/cancel`;
+  try {
+    const res = await fetch(url, { method: 'POST', headers: adminAuthHeaders() });
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      clearAdminToken();
+      return { ok: false, error: 'Sesión expirada.' };
+    }
+    if (!res.ok) {
+      let err = `HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(text) as { error?: string };
+        if (j.error) err = j.error;
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, error: err };
+    }
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
 export async function fetchAdminOrders(): Promise<{ ok: true; orders: AdminOrder[] } | { ok: false; error: string }> {
   const base = apiBase();
   const url = base ? `${base}/api/admin/orders` : '/api/admin/orders';

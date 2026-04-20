@@ -1,4 +1,4 @@
-import type { RowDataPacket } from 'mysql2/promise';
+import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { skuComparable, skuForDbQuery } from '../lupoSku.js';
 import { getPool } from '../pool.js';
 import type { Product, ProductSyncSource, ProductVariant } from '../types.js';
@@ -77,6 +77,52 @@ function rowToProduct(row: RowDataPacket): Product {
     variants: parseVariants(row.variants_json),
     images: parseStringArray(row.images_json),
   };
+}
+
+/**
+ * Devuelve unidades al stock al cancelar un pedido.
+ * `productId` puede ser id de producto o id de variante (líneas del checkout con variante).
+ */
+export async function restoreStockForCancelledOrderLine(
+  conn: PoolConnection,
+  productId: string,
+  quantity: number
+): Promise<void> {
+  const qty = Math.max(0, Math.floor(Number(quantity)));
+  if (qty <= 0) return;
+
+  const [direct] = await conn.query<RowDataPacket[]>(
+    'SELECT id FROM products WHERE id = ? LIMIT 1',
+    [productId]
+  );
+  if (direct.length) {
+    await conn.query(
+      'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?',
+      [qty, productId]
+    );
+    return;
+  }
+
+  const [withVar] = await conn.query<RowDataPacket[]>(
+    `SELECT id, variants_json FROM products WHERE variants_json IS NOT NULL AND variants_json != ''`
+  );
+  for (const row of withVar) {
+    const variants = parseVariants(row.variants_json);
+    if (!variants?.length) continue;
+    const ix = variants.findIndex((v) => v.id === productId);
+    if (ix === -1) continue;
+    const next = variants.map((v, i) =>
+      i === ix ? { ...v, stockQuantity: Math.max(0, (v.stockQuantity ?? 0) + qty) } : v
+    );
+    const sumStock = next.reduce((s, v) => s + Math.max(0, v.stockQuantity ?? 0), 0);
+    await conn.query(
+      'UPDATE products SET variants_json = ?, stock_quantity = ? WHERE id = ?',
+      [JSON.stringify(next), sumStock, String(row.id)]
+    );
+    return;
+  }
+
+  throw new Error(`No se encontró el producto o variante «${productId}» para restaurar stock.`);
 }
 
 export async function listProducts(): Promise<Product[]> {

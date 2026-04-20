@@ -104,8 +104,15 @@ export async function createCheckoutOrder(params: {
     throw new Error('El pedido no tiene productos.');
   }
   const paymentMethod = assertPaymentMethod(params.paymentMethod);
-  const installments = paymentMethod === 'card' ? Number(params.installments ?? 1) : 1;
-  const interestRate = paymentMethod === 'card' ? (INSTALLMENT_INTEREST_RATE[installments] ?? 0) : 0;
+  const installments =
+    paymentMethod === 'card' ? Math.max(1, Math.floor(Number(params.installments ?? 1))) : 1;
+  /**
+   * Tarjeta embebida (CardForm): el SDK fija el monto con el total del carrito. Si acá sumamos recargo por
+   * cuotas, Mercado Pago rechaza el pago (Invalid transaction_amount) al no coincidir con el token.
+   * El plan de cuotas lo define MP en el cobro; no aplicamos interés comercial extra en este flujo.
+   */
+  const interestRate =
+    paymentMethod === 'card' ? 0 : INSTALLMENT_INTEREST_RATE[installments] ?? 0;
 
   const p = await getPool();
   const conn = await p.getConnection();
@@ -222,7 +229,7 @@ export async function processMercadoPagoCardPayment(params: {
 
   const p = await getPool();
   const [rows] = await p.query<RowDataPacket[]>(
-    `SELECT id, total, currency, payment_method, payment_status, status, payment_reference
+    `SELECT id, subtotal, total, currency, payment_method, payment_status, status, payment_reference
      FROM orders WHERE id = ? LIMIT 1`,
     [params.orderId]
   );
@@ -236,8 +243,22 @@ export async function processMercadoPagoCardPayment(params: {
     throw new Error('Este pedido no está configurado para pago con tarjeta.');
   }
 
-  const transactionAmount = Number(order.total);
+  const rawTotal = Number(order.total);
+  const rawSubtotal = Number(order.subtotal);
+  let transactionAmount = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : 0;
+  if (transactionAmount <= 0 && Number.isFinite(rawSubtotal) && rawSubtotal > 0) {
+    transactionAmount = rawSubtotal;
+  }
+  transactionAmount = Math.round(transactionAmount * 100) / 100;
+  if (!Number.isFinite(transactionAmount) || transactionAmount <= 0) {
+    throw new Error(
+      'El pedido tiene un total inválido para cobrar con Mercado Pago (0 o no numérico). Revisá precios y líneas del carrito.'
+    );
+  }
+
   const installments = Math.max(1, Number(params.installments || 1));
+  const currencyId = String(order.currency ?? 'ARS').trim() || 'ARS';
+
   const paymentPayload: {
     transaction_amount: number;
     token: string;
@@ -251,6 +272,7 @@ export async function processMercadoPagoCardPayment(params: {
     };
     external_reference: string;
     metadata: { order_id: string };
+    currency_id: string;
   } = {
     transaction_amount: transactionAmount,
     token: params.token,
@@ -262,6 +284,7 @@ export async function processMercadoPagoCardPayment(params: {
     },
     external_reference: String(params.orderId),
     metadata: { order_id: String(params.orderId) },
+    currency_id: currencyId,
   };
 
   const issuerId = Number(params.issuerId || '');

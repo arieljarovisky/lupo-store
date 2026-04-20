@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useCart } from '../context/CartContext';
 import { Link } from 'react-router-dom';
 import {
+  AlertCircle,
   Banknote,
   CheckCircle2,
   CreditCard,
@@ -88,10 +89,10 @@ function friendlyMercadoPagoFormError(raw: string): string {
   const t = raw.trim();
   if (/payer_costs|Cannot destructure|get_installments/i.test(t)) {
     return (
-      'Mercado Pago no pudo cargar las cuotas (respuesta incompleta de la API). Lo más frecuente: ' +
-      'clave pública de prueba con tarjeta de producción o al revés; monto del pedido muy bajo; o un fallo puntual de MP. ' +
-      'Revisá que VITE_MERCADO_PAGO_PUBLIC_KEY y MERCADO_PAGO_ACCESS_TOKEN sean ambas de prueba o ambas de producción, ' +
-      'probá otra tarjeta de prueba oficial y un monto mayor (ej. > $100). Detalle técnico: ' +
+      'No se pudieron cargar las cuotas en este momento. Lo más habitual es un total de pedido demasiado bajo: Mercado Pago a veces no devuelve planes de cuotas si el monto no alcanza un mínimo. ' +
+      'Probá sumando más productos o con un total mayor; también podés usar solo redirección a Mercado Pago u otra tarjeta. ' +
+      'Si persiste, comprobá que la clave pública (frontend) y el token (backend) sean ambos de prueba o ambos de producción. ' +
+      'Detalle técnico: ' +
       t
     );
   }
@@ -281,7 +282,7 @@ export function Checkout() {
               const data = cardForm.getCardFormData();
               if (!data.token?.trim() || !data.paymentMethodId?.trim()) {
                 setError(
-                  'Completá los datos de la tarjeta, documento y cuotas. Si el error persiste, verificá VITE_MERCADO_PAGO_PUBLIC_KEY y que uses la misma cuenta (test/producción) que en el backend.'
+                  'Faltan datos obligatorios del pago con tarjeta: revisá número, vencimiento, CVV, titular, documento, email y que elijas un plan en Cuotas (o un monto mayor si la lista no cargó). Verificá también que la clave pública de Mercado Pago en el sitio coincida con test o producción según el backend.'
                 );
                 return;
               }
@@ -435,8 +436,13 @@ export function Checkout() {
     );
   }
 
+  /** Altura alineada con iframes MP (h-12) y fondo blanco uniforme (evita contraste con autofill azul). */
   const inputClass =
-    'w-full px-4 py-3 bg-white border border-lupo-border rounded-md text-[14px] outline-none transition-shadow focus:border-lupo-black focus:ring-2 focus:ring-lupo-black/10';
+    'w-full h-12 px-4 py-0 bg-white border border-lupo-border rounded-md text-[14px] leading-normal outline-none transition-shadow focus:border-lupo-black focus:ring-2 focus:ring-lupo-black/10 ' +
+    '[color-scheme:light] [&:-webkit-autofill]:shadow-[inset_0_0_0_1000px_#fff] [&:-webkit-autofill]:[-webkit-text-fill-color:#1a1a1a]';
+
+  const mpIframeClass =
+    'w-full h-12 rounded-md border border-lupo-border bg-white overflow-hidden [&_iframe]:block [&_iframe]:h-12 [&_iframe]:max-h-12 [&_iframe]:w-full';
 
   return (
     <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] max-w-7xl mx-auto bg-[#fafafa]">
@@ -591,89 +597,106 @@ export function Checkout() {
               <div className="mt-6 rounded-xl border border-lupo-border bg-lupo-gray/40 p-4 md:p-5">
                 {paymentMethod === 'card' && (
                   <>
-                    <div className="mb-4 flex items-start gap-2 text-[12px] text-lupo-text">
+                    <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-lupo-border bg-white px-3 py-2.5 text-[12px] text-lupo-text">
                       <Lock className="mt-0.5 h-4 w-4 shrink-0 text-lupo-black" aria-hidden />
                       <span>
-                        Datos de tarjeta encriptados por Mercado Pago. No almacenamos el número completo en nuestros
+                        Datos sensibles en iframes seguros de Mercado Pago. No guardamos el número completo en nuestros
                         servidores.
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-                      <div className="min-w-0">
-                        <label className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Número de tarjeta
-                        </label>
-                        <div
-                          id="form-checkout__cardNumber"
-                          className="w-full h-12 rounded-md border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
-                        />
+
+                    {paymentTotal > 0 && paymentTotal < 150 && (
+                      <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2.5 text-[12px] text-amber-950">
+                        <strong className="font-medium">Monto bajo:</strong> con totales muy chicos Mercado Pago a veces
+                        no muestra opciones de cuotas o falla al cargarlas. Si ves el menú vacío, aumentá el pedido o pagá
+                        en un solo pago.
                       </div>
-                      <div className="min-w-0">
-                        <label className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Vencimiento
-                        </label>
-                        <div
-                          id="form-checkout__expirationDate"
-                          className="w-full h-12 rounded-md border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
-                        />
-                        <p className="mt-1.5 text-[11px] leading-snug text-lupo-text">
-                          Formato <strong className="font-medium text-lupo-black">MM/AA</strong>: mes (01–12) y año en
-                          dos cifras (ej. <strong className="font-medium text-lupo-black">08/28</strong> = agosto 2028).
-                          La tarjeta no puede estar vencida respecto a la fecha actual.
-                        </p>
+                    )}
+
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5">
+                        <div className="min-w-0 flex flex-col">
+                          <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black">
+                            Número de tarjeta
+                          </label>
+                          <div id="form-checkout__cardNumber" className={mpIframeClass} />
+                        </div>
+                        <div className="min-w-0 flex flex-col">
+                          <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black">
+                            Vencimiento
+                          </label>
+                          <div id="form-checkout__expirationDate" className={mpIframeClass} />
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <label className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Código de seguridad
-                        </label>
-                        <div
-                          id="form-checkout__securityCode"
-                          className="w-full h-12 rounded-md border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
-                        />
+                      <p className="text-[11px] leading-snug text-lupo-muted [-webkit-font-smoothing:antialiased]">
+                        <span className="font-medium text-lupo-black">MM/AA</span>: mes y año en dos cifras (p. ej.{' '}
+                        <span className="font-mono text-lupo-black">08/28</span>). Tiene que ser una fecha futura.
+                      </p>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5">
+                        <div className="min-w-0 flex flex-col">
+                          <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black">
+                            Código de seguridad
+                          </label>
+                          <div id="form-checkout__securityCode" className={mpIframeClass} />
+                        </div>
+                        <div className="min-w-0 flex flex-col">
+                          <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black" htmlFor="form-checkout__cardholderName">
+                            Titular
+                          </label>
+                          <input id="form-checkout__cardholderName" className={inputClass} autoComplete="cc-name" />
+                        </div>
                       </div>
-                      <div>
-                        <label htmlFor="form-checkout__cardholderName" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Titular
-                        </label>
-                        <input id="form-checkout__cardholderName" className={inputClass} />
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5">
+                        <div className="min-w-0 flex flex-col">
+                          <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black" htmlFor="form-checkout__identificationType">
+                            Tipo de documento
+                          </label>
+                          <select id="form-checkout__identificationType" className={`${inputClass} cursor-pointer`} />
+                        </div>
+                        <div className="min-w-0 flex flex-col">
+                          <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black" htmlFor="form-checkout__identificationNumber">
+                            Número de documento
+                          </label>
+                          <input id="form-checkout__identificationNumber" className={inputClass} autoComplete="off" />
+                        </div>
                       </div>
-                      <div>
-                        <label htmlFor="form-checkout__identificationType" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Tipo de documento
-                        </label>
-                        <select id="form-checkout__identificationType" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="form-checkout__identificationNumber" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Número de documento
-                        </label>
-                        <input id="form-checkout__identificationNumber" className={inputClass} />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label htmlFor="form-checkout__cardholderEmail" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
+
+                      <div className="flex flex-col">
+                        <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black" htmlFor="form-checkout__cardholderEmail">
                           Email del titular
                         </label>
-                        <input id="form-checkout__cardholderEmail" className={inputClass} />
-                        <p className="mt-1 text-[11px] text-lupo-text">
-                          Si ya cargaste el email arriba en contacto, lo copiamos acá al iniciar el formulario de
-                          tarjeta.
+                        <input
+                          id="form-checkout__cardholderEmail"
+                          type="email"
+                          className={inputClass}
+                          autoComplete="email"
+                        />
+                        <p className="mt-1.5 text-[11px] text-lupo-muted">
+                          Si ya lo cargaste arriba en contacto, lo rellenamos al abrir esta sección.
                         </p>
                       </div>
-                      <div>
-                        <label htmlFor="form-checkout__issuer" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Banco emisor
-                        </label>
-                        <select id="form-checkout__issuer" className={inputClass} />
+
+                      <div className="rounded-lg border border-dashed border-lupo-border bg-white/80 px-3 py-2.5 text-[11px] leading-relaxed text-lupo-text">
+                        Las <span className="font-medium text-lupo-black">cuotas</span> las arma Mercado Pago según la
+                        tarjeta y el importe. Con montos reducidos a veces solo hay pago único o la lista falla hasta que
+                        suba el total.
                       </div>
-                      <div>
-                        <p className="mb-1.5 text-[11px] leading-snug text-lupo-text">
-                          Las cuotas las completa Mercado Pago cuando la tarjeta es válida y coincide la clave pública
-                          (test/producción) con tu cuenta.
-                        </p>
-                        <label htmlFor="form-checkout__installments" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Cuotas
-                        </label>
-                        <select id="form-checkout__installments" className={inputClass} />
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5">
+                        <div className="min-w-0 flex flex-col">
+                          <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black" htmlFor="form-checkout__issuer">
+                            Banco emisor
+                          </label>
+                          <select id="form-checkout__issuer" className={`${inputClass} cursor-pointer`} />
+                        </div>
+                        <div className="min-w-0 flex flex-col">
+                          <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black" htmlFor="form-checkout__installments">
+                            Cuotas
+                          </label>
+                          <select id="form-checkout__installments" className={`${inputClass} cursor-pointer`} />
+                        </div>
                       </div>
                     </div>
                     {!cardFormReady && !cardFormError && (
@@ -683,9 +706,13 @@ export function Checkout() {
                       </p>
                     )}
                     {cardFormError && (
-                      <p className="mt-4 text-[13px] text-red-600 rounded-md bg-red-50 px-3 py-2 border border-red-100">
-                        {cardFormError}
-                      </p>
+                      <div
+                        role="alert"
+                        className="mt-5 flex gap-3 rounded-lg border border-red-200 bg-red-50/95 px-4 py-3 text-[13px] leading-relaxed text-red-900"
+                      >
+                        <AlertCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-red-700" aria-hidden />
+                        <p className="min-w-0 whitespace-pre-wrap">{cardFormError}</p>
+                      </div>
                     )}
                   </>
                 )}
@@ -712,7 +739,13 @@ export function Checkout() {
             </section>
 
             {error && (
-              <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">{error}</p>
+              <div
+                role="alert"
+                className="flex gap-3 rounded-lg border border-red-200 bg-red-50/95 px-4 py-3 text-[13px] leading-relaxed text-red-900"
+              >
+                <AlertCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-red-700" aria-hidden />
+                <p className="min-w-0 whitespace-pre-wrap">{error}</p>
+              </div>
             )}
 
             <button

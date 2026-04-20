@@ -61,6 +61,28 @@ const MP_IFRAME_FIELD_STYLE = {
   fontSize: '16px',
 } as const;
 
+/** Monto estable para CardForm (MP es sensible a decimales raros). */
+function mercadoPagoAmountString(total: number): string {
+  const n = Math.round(Math.max(0, total) * 100) / 100;
+  return n.toFixed(2);
+}
+
+/** El SDK suele mandar `onError` como arreglo `{ message }[]`, no un solo `message`. */
+function messageFromMercadoPagoError(err: unknown): string {
+  if (err == null) return '';
+  if (Array.isArray(err)) {
+    return err
+      .map((e) =>
+        e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message ?? '') : ''
+      )
+      .filter(Boolean)
+      .join(' · ');
+  }
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && 'message' in err) return String((err as { message?: unknown }).message ?? '');
+  return String(err);
+}
+
 function loadMercadoPagoSdk(): Promise<void> {
   if (typeof window !== 'undefined' && window.MercadoPago) {
     return Promise.resolve();
@@ -204,8 +226,9 @@ export function Checkout() {
         }
         const mp = new window.MercadoPago(mpPublicKey, { locale: 'es-AR' });
         const cardForm = mp.cardForm({
-          amount: String(paymentTotal.toFixed(2)),
+          amount: mercadoPagoAmountString(paymentTotal),
           iframe: true,
+          processingMode: 'aggregator',
           form: {
             id: 'form-checkout',
             cardNumber: {
@@ -239,6 +262,11 @@ export function Checkout() {
               }
               setCardFormReady(true);
             },
+            onInstallmentsReceived: (installmentsError?: unknown) => {
+              if (cancelled) return;
+              const msg = messageFromMercadoPagoError(installmentsError);
+              if (msg) setCardFormError(msg);
+            },
             onSubmit: async (event: Event) => {
               event.preventDefault();
               const data = cardForm.getCardFormData();
@@ -250,9 +278,10 @@ export function Checkout() {
               }
               await submitEmbeddedCardPayment(data);
             },
-            onError: (mpError: { message?: string }) => {
+            onError: (mpError: unknown) => {
               if (cancelled) return;
-              setCardFormError(mpError?.message || 'Error en el formulario de tarjeta.');
+              const msg = messageFromMercadoPagoError(mpError);
+              setCardFormError(msg || 'Error en el formulario de tarjeta.');
             },
           },
         });
@@ -276,6 +305,18 @@ export function Checkout() {
       unmountCardFormSafely();
     };
   }, [paymentMethod, paymentTotal, mpPublicKey, unmountCardFormSafely]);
+
+  /** MP usa email/DNI del titular para cuotas y antifraude; copiamos el email del checkout si el campo MP sigue vacío. */
+  useEffect(() => {
+    if (paymentMethod !== 'card' || !cardFormReady) return;
+    const main = document.getElementById('email') as HTMLInputElement | null;
+    const holder = document.getElementById('form-checkout__cardholderEmail') as HTMLInputElement | null;
+    const mainEmail = main?.value?.trim();
+    if (!mainEmail || !holder || holder.value.trim()) return;
+    holder.value = mainEmail;
+    holder.dispatchEvent(new Event('input', { bubbles: true }));
+    holder.dispatchEvent(new Event('change', { bubbles: true }));
+  }, [paymentMethod, cardFormReady]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -564,6 +605,11 @@ export function Checkout() {
                           id="form-checkout__expirationDate"
                           className="w-full h-12 rounded-md border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
                         />
+                        <p className="mt-1.5 text-[11px] leading-snug text-lupo-text">
+                          Formato <strong className="font-medium text-lupo-black">MM/AA</strong>: mes (01–12) y año en
+                          dos cifras (ej. <strong className="font-medium text-lupo-black">08/28</strong> = agosto 2028).
+                          La tarjeta no puede estar vencida respecto a la fecha actual.
+                        </p>
                       </div>
                       <div className="min-w-0">
                         <label className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
@@ -579,18 +625,6 @@ export function Checkout() {
                           Titular
                         </label>
                         <input id="form-checkout__cardholderName" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="form-checkout__issuer" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Banco emisor
-                        </label>
-                        <select id="form-checkout__issuer" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="form-checkout__installments" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
-                          Cuotas
-                        </label>
-                        <select id="form-checkout__installments" className={inputClass} />
                       </div>
                       <div>
                         <label htmlFor="form-checkout__identificationType" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
@@ -609,6 +643,26 @@ export function Checkout() {
                           Email del titular
                         </label>
                         <input id="form-checkout__cardholderEmail" className={inputClass} />
+                        <p className="mt-1 text-[11px] text-lupo-text">
+                          Si ya cargaste el email arriba en contacto, lo copiamos acá al iniciar el formulario de
+                          tarjeta.
+                        </p>
+                      </div>
+                      <div>
+                        <label htmlFor="form-checkout__issuer" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
+                          Banco emisor
+                        </label>
+                        <select id="form-checkout__issuer" className={inputClass} />
+                      </div>
+                      <div>
+                        <p className="mb-1.5 text-[11px] leading-snug text-lupo-text">
+                          Las cuotas las completa Mercado Pago cuando la tarjeta es válida y coincide la clave pública
+                          (test/producción) con tu cuenta.
+                        </p>
+                        <label htmlFor="form-checkout__installments" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
+                          Cuotas
+                        </label>
+                        <select id="form-checkout__installments" className={inputClass} />
                       </div>
                     </div>
                     {!cardFormReady && !cardFormError && (

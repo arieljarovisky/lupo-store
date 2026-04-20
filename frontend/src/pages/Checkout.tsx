@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useCart } from '../context/CartContext';
 import { Link } from 'react-router-dom';
-import { CheckCircle2 } from 'lucide-react';
+import {
+  Banknote,
+  CheckCircle2,
+  CreditCard,
+  Landmark,
+  Loader2,
+  Lock,
+  Wallet,
+} from 'lucide-react';
 import {
   createCheckoutOrder,
   payOrderWithMercadoPagoCard,
@@ -14,6 +22,38 @@ function paymentLabel(method: CheckoutPaymentMethod): string {
   if (method === 'bank_transfer') return 'Transferencia bancaria';
   return 'Efectivo';
 }
+
+const PAYMENT_OPTIONS: {
+  id: CheckoutPaymentMethod;
+  title: string;
+  subtitle: string;
+  icon: typeof Wallet;
+}[] = [
+  {
+    id: 'mercado_pago',
+    title: 'Mercado Pago',
+    subtitle: 'Checkout seguro en Mercado Pago',
+    icon: Wallet,
+  },
+  {
+    id: 'card',
+    title: 'Tarjeta de crédito o débito',
+    subtitle: 'Pagá aquí con tarjeta (Mercado Pago)',
+    icon: CreditCard,
+  },
+  {
+    id: 'bank_transfer',
+    title: 'Transferencia bancaria',
+    subtitle: 'Te enviamos los datos CBU/CVU',
+    icon: Landmark,
+  },
+  {
+    id: 'cash',
+    title: 'Efectivo',
+    subtitle: 'Al entregar o retirar',
+    icon: Banknote,
+  },
+];
 
 /** Estilos de iframes según SDK MP (evita alturas desproporcionadas). */
 const MP_IFRAME_FIELD_STYLE = {
@@ -343,26 +383,35 @@ export function Checkout() {
     );
   }
 
+  const inputClass =
+    'w-full px-4 py-3 bg-white border border-lupo-border rounded-md text-[14px] outline-none transition-shadow focus:border-lupo-black focus:ring-2 focus:ring-lupo-black/10';
+
   return (
-    <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] max-w-7xl mx-auto">
-      <h1 className="text-[40px] md:text-[56px] font-light tracking-[-1px] mb-12">Checkout</h1>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-24">
+    <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] max-w-7xl mx-auto bg-[#fafafa]">
+      <h1 className="text-[40px] md:text-[56px] font-light tracking-[-1px] mb-3 text-lupo-black">Checkout</h1>
+      <p className="text-[14px] text-lupo-text mb-10 max-w-xl">
+        Completá tus datos y elegí cómo querés pagar. El resumen queda fijo al hacer scroll en pantallas grandes.
+      </p>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14">
         {/* Form */}
         <div className="lg:col-span-7">
-          <form id="form-checkout" onSubmit={handleSubmit} className="space-y-10">
+          <form id="form-checkout" onSubmit={handleSubmit} className="space-y-8">
             {/* Contact Info */}
-            <section>
-              <h2 className="text-[18px] font-medium mb-6 text-lupo-black">Información de Contacto</h2>
+            <section className="rounded-2xl border border-lupo-border bg-white p-6 md:p-8 shadow-sm">
+              <h2 className="text-[11px] uppercase tracking-[2px] font-semibold text-lupo-muted mb-1">
+                Paso 1
+              </h2>
+              <h3 className="text-[20px] font-medium mb-6 text-lupo-black">Información de contacto</h3>
               <div className="space-y-4">
                 <div>
                   <label htmlFor="email" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">Email</label>
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     name="email"
-                    id="email" 
+                    id="email"
                     required
-                    className="w-full px-4 py-3 bg-white border border-lupo-border focus:outline-none focus:border-lupo-black transition-colors text-[14px]"
+                    className={inputClass}
                     placeholder="tu@email.com"
                   />
                 </div>
@@ -372,7 +421,7 @@ export function Checkout() {
                     type="text"
                     name="phone"
                     id="phone"
-                    className="w-full px-4 py-3 bg-white border border-lupo-border focus:outline-none focus:border-lupo-black transition-colors text-[14px]"
+                    className={inputClass}
                     placeholder="+54 9 ..."
                   />
                 </div>
@@ -380,8 +429,11 @@ export function Checkout() {
             </section>
 
             {/* Shipping Info */}
-            <section>
-              <h2 className="text-[18px] font-medium mb-6 text-lupo-black">Dirección de Envío</h2>
+            <section className="rounded-2xl border border-lupo-border bg-white p-6 md:p-8 shadow-sm">
+              <h2 className="text-[11px] uppercase tracking-[2px] font-semibold text-lupo-muted mb-1">
+                Paso 2
+              </h2>
+              <h3 className="text-[20px] font-medium mb-6 text-lupo-black">Dirección de envío</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="firstName" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">Nombre</label>
@@ -390,7 +442,7 @@ export function Checkout() {
                     name="firstName"
                     id="firstName" 
                     required
-                    className="w-full px-4 py-3 bg-white border border-lupo-border focus:outline-none focus:border-lupo-black transition-colors text-[14px]"
+                    className={inputClass}
                   />
                 </div>
                 <div>
@@ -400,7 +452,7 @@ export function Checkout() {
                     name="lastName"
                     id="lastName" 
                     required
-                    className="w-full px-4 py-3 bg-white border border-lupo-border focus:outline-none focus:border-lupo-black transition-colors text-[14px]"
+                    className={inputClass}
                   />
                 </div>
                 <div className="col-span-2">
@@ -410,7 +462,7 @@ export function Checkout() {
                     name="address"
                     id="address" 
                     required
-                    className="w-full px-4 py-3 bg-white border border-lupo-border focus:outline-none focus:border-lupo-black transition-colors text-[14px]"
+                    className={inputClass}
                   />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
@@ -420,7 +472,7 @@ export function Checkout() {
                     name="city"
                     id="city" 
                     required
-                    className="w-full px-4 py-3 bg-white border border-lupo-border focus:outline-none focus:border-lupo-black transition-colors text-[14px]"
+                    className={inputClass}
                   />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
@@ -430,64 +482,70 @@ export function Checkout() {
                     name="zip"
                     id="zip" 
                     required
-                    className="w-full px-4 py-3 bg-white border border-lupo-border focus:outline-none focus:border-lupo-black transition-colors text-[14px]"
+                    className={inputClass}
                   />
                 </div>
               </div>
             </section>
 
             {/* Payment Info */}
-            <section>
-              <h2 className="text-[18px] font-medium mb-6 text-lupo-black">Pago</h2>
-              <div className="bg-white p-6 border border-lupo-border space-y-4">
-                <div>
-                  <p className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">Método de pago</p>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[14px]">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="mercado_pago"
-                        checked={paymentMethod === 'mercado_pago'}
-                        onChange={() => setPaymentMethod('mercado_pago')}
-                      />
-                      Mercado Pago
-                    </label>
-                    <label className="flex items-center gap-2 text-[14px]">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="card"
-                        checked={paymentMethod === 'card'}
-                        onChange={() => setPaymentMethod('card')}
-                      />
-                      Tarjeta de crédito o débito
-                    </label>
-                    <label className="flex items-center gap-2 text-[14px]">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="bank_transfer"
-                        checked={paymentMethod === 'bank_transfer'}
-                        onChange={() => setPaymentMethod('bank_transfer')}
-                      />
-                      Transferencia bancaria
-                    </label>
-                    <label className="flex items-center gap-2 text-[14px]">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="cash"
-                        checked={paymentMethod === 'cash'}
-                        onChange={() => setPaymentMethod('cash')}
-                      />
-                      Efectivo
-                    </label>
-                  </div>
-                </div>
+            <section className="rounded-2xl border border-lupo-border bg-white p-6 md:p-8 shadow-sm">
+              <h2 className="text-[11px] uppercase tracking-[2px] font-semibold text-lupo-muted mb-1">
+                Paso 3
+              </h2>
+              <h3 className="text-[20px] font-medium mb-2 text-lupo-black">Método de pago</h3>
+              <p className="text-[13px] text-lupo-text mb-6">
+                Elegí una opción. Mercado Pago y tarjeta embebida usan la misma cuenta de cobro.
+              </p>
 
+              <div className="space-y-3" role="radiogroup" aria-label="Método de pago">
+                {PAYMENT_OPTIONS.map(({ id, title, subtitle, icon: Icon }) => {
+                  const selected = paymentMethod === id;
+                  return (
+                    <label
+                      key={id}
+                      className={`block cursor-pointer rounded-xl border bg-white p-4 transition-all hover:border-[#ccc] ${
+                        selected
+                          ? 'border-lupo-black bg-[#fafafa] shadow-[inset_0_0_0_1px_#1a1a1a]'
+                          : 'border-lupo-border'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value={id}
+                        checked={selected}
+                        onChange={() => setPaymentMethod(id)}
+                        className="sr-only"
+                      />
+                      <div className="flex items-start gap-4">
+                        <span
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                            selected ? 'bg-lupo-black text-white' : 'bg-lupo-gray text-lupo-black'
+                          }`}
+                        >
+                          <Icon size={22} strokeWidth={1.5} aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1 pt-0.5">
+                          <span className="block text-[15px] font-medium text-lupo-black">{title}</span>
+                          <span className="mt-0.5 block text-[12px] leading-snug text-lupo-text">{subtitle}</span>
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 rounded-xl border border-lupo-border bg-lupo-gray/40 p-4 md:p-5">
                 {paymentMethod === 'card' && (
                   <>
+                    <div className="mb-4 flex items-start gap-2 text-[12px] text-lupo-text">
+                      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-lupo-black" aria-hidden />
+                      <span>
+                        Datos de tarjeta encriptados por Mercado Pago. No almacenamos el número completo en nuestros
+                        servidores.
+                      </span>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
                       <div className="min-w-0">
                         <label className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
@@ -495,7 +553,7 @@ export function Checkout() {
                         </label>
                         <div
                           id="form-checkout__cardNumber"
-                          className="w-full h-12 border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
+                          className="w-full h-12 rounded-md border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
                         />
                       </div>
                       <div className="min-w-0">
@@ -504,7 +562,7 @@ export function Checkout() {
                         </label>
                         <div
                           id="form-checkout__expirationDate"
-                          className="w-full h-12 border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
+                          className="w-full h-12 rounded-md border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
                         />
                       </div>
                       <div className="min-w-0">
@@ -513,134 +571,152 @@ export function Checkout() {
                         </label>
                         <div
                           id="form-checkout__securityCode"
-                          className="w-full h-12 border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
+                          className="w-full h-12 rounded-md border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
                         />
                       </div>
                       <div>
                         <label htmlFor="form-checkout__cardholderName" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
                           Titular
                         </label>
-                        <input id="form-checkout__cardholderName" className="w-full px-4 py-3 border border-lupo-border text-[14px]" />
+                        <input id="form-checkout__cardholderName" className={inputClass} />
                       </div>
                       <div>
                         <label htmlFor="form-checkout__issuer" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
                           Banco emisor
                         </label>
-                        <select id="form-checkout__issuer" className="w-full px-4 py-3 border border-lupo-border text-[14px]" />
+                        <select id="form-checkout__issuer" className={inputClass} />
                       </div>
                       <div>
                         <label htmlFor="form-checkout__installments" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
                           Cuotas
                         </label>
-                        <select id="form-checkout__installments" className="w-full px-4 py-3 border border-lupo-border text-[14px]" />
+                        <select id="form-checkout__installments" className={inputClass} />
                       </div>
                       <div>
                         <label htmlFor="form-checkout__identificationType" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
                           Tipo de documento
                         </label>
-                        <select id="form-checkout__identificationType" className="w-full px-4 py-3 border border-lupo-border text-[14px]" />
+                        <select id="form-checkout__identificationType" className={inputClass} />
                       </div>
                       <div>
                         <label htmlFor="form-checkout__identificationNumber" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
                           Número de documento
                         </label>
-                        <input id="form-checkout__identificationNumber" className="w-full px-4 py-3 border border-lupo-border text-[14px]" />
+                        <input id="form-checkout__identificationNumber" className={inputClass} />
                       </div>
                       <div className="sm:col-span-2">
                         <label htmlFor="form-checkout__cardholderEmail" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
                           Email del titular
                         </label>
-                        <input id="form-checkout__cardholderEmail" className="w-full px-4 py-3 border border-lupo-border text-[14px]" />
+                        <input id="form-checkout__cardholderEmail" className={inputClass} />
                       </div>
                     </div>
-                    <div className="text-[12px] text-lupo-text">
-                      Mercado Pago procesa la tarjeta de forma embebida y segura, sin salir de esta página.
-                    </div>
                     {!cardFormReady && !cardFormError && (
-                      <p className="text-[12px] text-lupo-text">Cargando formulario de tarjeta…</p>
+                      <p className="mt-4 flex items-center gap-2 text-[13px] text-lupo-text">
+                        <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
+                        Preparando campos seguros…
+                      </p>
                     )}
-                    {cardFormError && <p className="text-[12px] text-red-600">{cardFormError}</p>}
+                    {cardFormError && (
+                      <p className="mt-4 text-[13px] text-red-600 rounded-md bg-red-50 px-3 py-2 border border-red-100">
+                        {cardFormError}
+                      </p>
+                    )}
                   </>
                 )}
 
                 {paymentMethod === 'bank_transfer' && (
-                  <p className="text-[13px] text-lupo-text">
-                    Al confirmar, te enviaremos los datos bancarios para completar el pago por transferencia.
+                  <p className="text-[14px] leading-relaxed text-lupo-text">
+                    Al confirmar el pedido, te enviamos por email o WhatsApp los datos para transferir (CBU/CVU o alias).
                   </p>
                 )}
 
                 {paymentMethod === 'cash' && (
-                  <p className="text-[13px] text-lupo-text">
-                    El pago en efectivo se coordina al momento de entrega o retiro.
+                  <p className="text-[14px] leading-relaxed text-lupo-text">
+                    Coordinamos el pago en efectivo al momento de la entrega o cuando retires el pedido.
                   </p>
                 )}
 
                 {paymentMethod === 'mercado_pago' && (
-                  <p className="text-[13px] text-lupo-text">
-                    Te vamos a redirigir a Mercado Pago para completar el pago de forma segura.
+                  <p className="text-[14px] leading-relaxed text-lupo-text">
+                    Vas a salir un momento al sitio de Mercado Pago para autorizar el pago con tu cuenta o tarjeta, de
+                    forma segura.
                   </p>
                 )}
               </div>
             </section>
 
             {error && (
-              <p className="text-[13px] text-red-600">{error}</p>
+              <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">{error}</p>
             )}
 
             <button
               id="form-checkout__submit"
               type="submit"
               disabled={isSubmitting || (paymentMethod === 'card' && !cardFormReady)}
-              className="w-full bg-lupo-black disabled:opacity-60 text-white px-[40px] py-[18px] uppercase text-[12px] tracking-[2px] font-semibold hover:bg-black/80 transition-colors mt-8"
+              className="group flex w-full items-center justify-center gap-2 rounded-md bg-lupo-black px-8 py-[18px] text-[12px] font-semibold uppercase tracking-[2px] text-white shadow-sm transition-all hover:bg-black/85 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting
-                ? 'Procesando...'
-                : paymentMethod === 'card'
-                  ? `Pagar con tarjeta $${paymentTotal.toFixed(2)}`
-                  : `Pagar $${paymentTotal.toFixed(2)}`}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Procesando…
+                </>
+              ) : paymentMethod === 'card' ? (
+                `Pagar con tarjeta · $${paymentTotal.toFixed(2)}`
+              ) : (
+                `Confirmar y pagar · $${paymentTotal.toFixed(2)}`
+              )}
             </button>
           </form>
         </div>
 
         {/* Order Summary */}
-        <div className="lg:col-span-5">
-          <div className="bg-white border border-lupo-border p-8 sticky top-[120px]">
-            <h2 className="text-[18px] font-medium mb-6 text-lupo-black">Resumen de Orden</h2>
-            
-            <div className="space-y-4 mb-6">
+        <div className="lg:col-span-5 lg:self-start">
+          <div className="sticky top-28 rounded-2xl border border-lupo-border bg-white p-6 md:p-8 shadow-md">
+            <h2 className="text-[11px] uppercase tracking-[2px] font-semibold text-lupo-muted mb-1">Tu pedido</h2>
+            <p className="text-[20px] font-medium text-lupo-black mb-6">Resumen</p>
+
+            <ul className="space-y-4 mb-6">
               {items.map((item) => (
-                <div key={item.id} className="flex gap-4">
-                  <div className="w-16 h-20 bg-[#F0F0F0] border border-[#EEE] overflow-hidden flex-shrink-0">
-                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                <li
+                  key={item.id}
+                  className="flex gap-4 rounded-lg border border-lupo-border/80 bg-lupo-gray/30 p-3"
+                >
+                  <div className="h-20 w-16 shrink-0 overflow-hidden rounded-md border border-lupo-border bg-[#eee]">
+                    <img src={item.image} alt="" className="h-full w-full object-cover" />
                   </div>
-                  <div>
-                    <h3 className="font-medium text-[13px] text-lupo-black">{item.name}</h3>
-                    <p className="text-[11px] text-[#777] mt-1">Cant: {item.quantity}</p>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="line-clamp-2 font-medium text-[13px] text-lupo-black">{item.name}</h3>
+                    <p className="mt-1 text-[11px] text-lupo-muted">Cantidad · {item.quantity}</p>
                   </div>
-                  <div className="font-medium text-[13px] text-lupo-black">
-                    ${(item.price * item.quantity).toFixed(2)}
+                  <div className="shrink-0 text-right">
+                    <span className="text-[13px] font-semibold tabular-nums text-lupo-black">
+                      ${(item.price * item.quantity).toFixed(2)}
+                    </span>
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
-            
-            <div className="border-t border-lupo-border pt-6 space-y-4">
+            </ul>
+
+            <div className="space-y-3 border-t border-lupo-border pt-6">
               <div className="flex justify-between text-[13px]">
                 <span className="text-lupo-text">Subtotal</span>
-                <span className="font-medium text-lupo-black">${cartTotal.toFixed(2)}</span>
+                <span className="font-medium tabular-nums text-lupo-black">${cartTotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[13px]">
                 <span className="text-lupo-text">Envío</span>
-                <span className="text-[#2E7D32] font-medium">Gratis</span>
+                <span className="font-medium text-[#2E7D32]">Gratis</span>
               </div>
               <div className="flex justify-between text-[13px]">
                 <span className="text-lupo-text">Impuestos</span>
-                <span className="font-medium text-lupo-black">$0.00</span>
+                <span className="font-medium tabular-nums text-lupo-black">$0.00</span>
               </div>
-              
-              <div className="border-t border-lupo-border pt-4 flex justify-between items-center">
-                <span className="font-medium text-[16px] text-lupo-black">Total</span>
-                <span className="font-light text-[24px] text-lupo-black">${paymentTotal.toFixed(2)}</span>
+
+              <div className="flex items-baseline justify-between border-t border-lupo-border pt-4">
+                <span className="text-[15px] font-semibold text-lupo-black">Total</span>
+                <span className="font-light tabular-nums text-[28px] tracking-tight text-lupo-black">
+                  ${paymentTotal.toFixed(2)}
+                </span>
               </div>
             </div>
           </div>

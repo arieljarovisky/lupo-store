@@ -257,7 +257,6 @@ export async function processMercadoPagoCardPayment(params: {
   }
 
   const installments = Math.max(1, Number(params.installments || 1));
-  const currencyId = String(order.currency ?? 'ARS').trim() || 'ARS';
 
   const paymentPayload: {
     transaction_amount: number;
@@ -272,7 +271,6 @@ export async function processMercadoPagoCardPayment(params: {
     };
     external_reference: string;
     metadata: { order_id: string };
-    currency_id: string;
   } = {
     transaction_amount: transactionAmount,
     token: params.token,
@@ -284,7 +282,6 @@ export async function processMercadoPagoCardPayment(params: {
     },
     external_reference: String(params.orderId),
     metadata: { order_id: String(params.orderId) },
-    currency_id: currencyId,
   };
 
   const issuerId = Number(params.issuerId || '');

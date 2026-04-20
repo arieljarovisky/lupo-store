@@ -57,7 +57,7 @@ export function Checkout() {
   const paymentTotal = cartTotal;
 
   const submitEmbeddedCardPayment = async (cardData: ReturnType<MercadoPagoCardFormInstance['getCardFormData']>) => {
-    const checkoutForm = document.getElementById('checkout-form') as HTMLFormElement | null;
+    const checkoutForm = document.getElementById('form-checkout') as HTMLFormElement | null;
     if (!checkoutForm) {
       setError('No se encontró el formulario de checkout.');
       return;
@@ -147,10 +147,10 @@ export function Checkout() {
         }
         const mp = new window.MercadoPago(mpPublicKey, { locale: 'es-AR' });
         const cardForm = mp.cardForm({
-          amount: paymentTotal.toFixed(2),
+          amount: String(paymentTotal.toFixed(2)),
           iframe: true,
           form: {
-            id: 'checkout-form',
+            id: 'form-checkout',
             cardNumber: { id: 'form-checkout__cardNumber', placeholder: 'Número de tarjeta' },
             expirationDate: { id: 'form-checkout__expirationDate', placeholder: 'MM/YY' },
             securityCode: { id: 'form-checkout__securityCode', placeholder: 'CVV' },
@@ -172,6 +172,12 @@ export function Checkout() {
             onSubmit: async (event: Event) => {
               event.preventDefault();
               const data = cardForm.getCardFormData();
+              if (!data.token?.trim() || !data.paymentMethodId?.trim()) {
+                setError(
+                  'Completá los datos de la tarjeta, documento y cuotas. Si el error persiste, verificá VITE_MERCADO_PAGO_PUBLIC_KEY y que uses la misma cuenta (test/producción) que en el backend.'
+                );
+                return;
+              }
               await submitEmbeddedCardPayment(data);
             },
             onError: (mpError: { message?: string }) => {
@@ -305,7 +311,7 @@ export function Checkout() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-24">
         {/* Form */}
         <div className="lg:col-span-7">
-          <form id="checkout-form" onSubmit={handleSubmit} className="space-y-10">
+          <form id="form-checkout" onSubmit={handleSubmit} className="space-y-10">
             {/* Contact Info */}
             <section>
               <h2 className="text-[18px] font-medium mb-6 text-lupo-black">Información de Contacto</h2>
@@ -534,7 +540,7 @@ export function Checkout() {
             )}
 
             <button
-              id="checkout-submit"
+              id="form-checkout__submit"
               type="submit"
               disabled={isSubmitting || (paymentMethod === 'card' && !cardFormReady)}
               className="w-full bg-lupo-black disabled:opacity-60 text-white px-[40px] py-[18px] uppercase text-[12px] tracking-[2px] font-semibold hover:bg-black/80 transition-colors mt-8"

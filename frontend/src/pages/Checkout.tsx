@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useCart } from '../context/CartContext';
 import { Link } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
@@ -14,6 +14,12 @@ function paymentLabel(method: CheckoutPaymentMethod): string {
   if (method === 'bank_transfer') return 'Transferencia bancaria';
   return 'Efectivo';
 }
+
+/** Estilos de iframes según SDK MP (evita alturas desproporcionadas). */
+const MP_IFRAME_FIELD_STYLE = {
+  height: '44px',
+  fontSize: '16px',
+} as const;
 
 function loadMercadoPagoSdk(): Promise<void> {
   if (typeof window !== 'undefined' && window.MercadoPago) {
@@ -55,6 +61,17 @@ export function Checkout() {
   const mpPublicKey = import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY?.trim() || '';
 
   const paymentTotal = cartTotal;
+
+  const unmountCardFormSafely = useCallback(() => {
+    const cf = cardFormRef.current;
+    if (!cf) return;
+    try {
+      cf.unmount();
+    } catch {
+      /* instancia ya desmontada o contenedor ausente */
+    }
+    cardFormRef.current = null;
+  }, []);
 
   const submitEmbeddedCardPayment = async (cardData: ReturnType<MercadoPagoCardFormInstance['getCardFormData']>) => {
     const checkoutForm = document.getElementById('form-checkout') as HTMLFormElement | null;
@@ -126,7 +143,7 @@ export function Checkout() {
     if (paymentMethod !== 'card') {
       setCardFormReady(false);
       setCardFormError(null);
-      cardFormRef.current = null;
+      unmountCardFormSafely();
       return;
     }
     if (!mpPublicKey) {
@@ -151,9 +168,21 @@ export function Checkout() {
           iframe: true,
           form: {
             id: 'form-checkout',
-            cardNumber: { id: 'form-checkout__cardNumber', placeholder: 'Número de tarjeta' },
-            expirationDate: { id: 'form-checkout__expirationDate', placeholder: 'MM/YY' },
-            securityCode: { id: 'form-checkout__securityCode', placeholder: 'CVV' },
+            cardNumber: {
+              id: 'form-checkout__cardNumber',
+              placeholder: 'Número de tarjeta',
+              style: { ...MP_IFRAME_FIELD_STYLE },
+            },
+            expirationDate: {
+              id: 'form-checkout__expirationDate',
+              placeholder: 'MM/YY',
+              style: { ...MP_IFRAME_FIELD_STYLE },
+            },
+            securityCode: {
+              id: 'form-checkout__securityCode',
+              placeholder: 'CVV',
+              style: { ...MP_IFRAME_FIELD_STYLE },
+            },
             cardholderName: { id: 'form-checkout__cardholderName', placeholder: 'Titular de la tarjeta' },
             issuer: { id: 'form-checkout__issuer', placeholder: 'Banco emisor' },
             installments: { id: 'form-checkout__installments', placeholder: 'Cuotas' },
@@ -163,6 +192,7 @@ export function Checkout() {
           },
           callbacks: {
             onFormMounted: (mountError: Error | undefined) => {
+              if (cancelled) return;
               if (mountError) {
                 setCardFormError(mountError.message || 'No se pudo montar el formulario de tarjeta.');
                 return;
@@ -181,10 +211,19 @@ export function Checkout() {
               await submitEmbeddedCardPayment(data);
             },
             onError: (mpError: { message?: string }) => {
+              if (cancelled) return;
               setCardFormError(mpError?.message || 'Error en el formulario de tarjeta.');
             },
           },
         });
+        if (cancelled) {
+          try {
+            cardForm.unmount();
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
         cardFormRef.current = cardForm;
       })
       .catch((sdkError: unknown) => {
@@ -194,9 +233,9 @@ export function Checkout() {
 
     return () => {
       cancelled = true;
-      cardFormRef.current = null;
+      unmountCardFormSafely();
     };
-  }, [paymentMethod, paymentTotal, mpPublicKey]);
+  }, [paymentMethod, paymentTotal, mpPublicKey, unmountCardFormSafely]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -449,24 +488,33 @@ export function Checkout() {
 
                 {paymentMethod === 'card' && (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                      <div className="min-w-0">
                         <label className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
                           Número de tarjeta
                         </label>
-                        <div id="form-checkout__cardNumber" className="w-full px-4 py-3 border border-lupo-border min-h-[46px]" />
+                        <div
+                          id="form-checkout__cardNumber"
+                          className="w-full h-12 border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
+                        />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <label className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
                           Vencimiento
                         </label>
-                        <div id="form-checkout__expirationDate" className="w-full px-4 py-3 border border-lupo-border min-h-[46px]" />
+                        <div
+                          id="form-checkout__expirationDate"
+                          className="w-full h-12 border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
+                        />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <label className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">
                           Código de seguridad
                         </label>
-                        <div id="form-checkout__securityCode" className="w-full px-4 py-3 border border-lupo-border min-h-[46px]" />
+                        <div
+                          id="form-checkout__securityCode"
+                          className="w-full h-12 border border-lupo-border overflow-hidden bg-white [&_iframe]:block [&_iframe]:max-h-12"
+                        />
                       </div>
                       <div>
                         <label htmlFor="form-checkout__cardholderName" className="block text-[11px] uppercase tracking-[1px] font-semibold text-lupo-black mb-2">

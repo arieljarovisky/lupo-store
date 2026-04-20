@@ -24,6 +24,8 @@ declare global {
       identificationType?: string;
       identificationNumber?: string;
     };
+    unmount: () => void;
+    mount: () => void;
   }
 
   interface MercadoPagoInstance {

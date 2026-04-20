@@ -401,6 +401,45 @@ export async function fetchAdminOrders(): Promise<{ ok: true; orders: AdminOrder
   }
 }
 
+export async function adminPatchProductPrice(params: {
+  productId: string;
+  price: number;
+  variantId?: string | null;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const base = apiBase();
+  const id = encodeURIComponent(params.productId);
+  const url = base ? `${base}/api/admin/products/${id}/price` : `/api/admin/products/${id}/price`;
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: adminAuthHeaders(),
+      body: JSON.stringify({
+        price: params.price,
+        ...(params.variantId ? { variantId: params.variantId } : {}),
+      }),
+    });
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      clearAdminToken();
+      return { ok: false, error: 'Sesión expirada.' };
+    }
+    if (!res.ok) {
+      let err = `HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(text) as { error?: string };
+        if (j.error) err = j.error;
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, error: err };
+    }
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
 export async function fetchAdminCustomers(): Promise<
   { ok: true; customers: AdminCustomerRow[] } | { ok: false; error: string }
 > {

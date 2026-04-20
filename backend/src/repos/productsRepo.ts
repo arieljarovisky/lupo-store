@@ -89,6 +89,61 @@ export async function listProducts(): Promise<Product[]> {
   return rows.map(rowToProduct);
 }
 
+/**
+ * Actualiza precio del producto (sin variantes) o de una variante (variants_json).
+ * Precio en pesos enteros, coherente con columna `price` INT.
+ */
+export async function updateProductOrVariantPrice(params: {
+  productId: string;
+  price: number;
+  variantId?: string | null;
+}): Promise<void> {
+  const productId = params.productId.trim();
+  if (!productId) {
+    throw new Error('Producto inválido.');
+  }
+  const price = Math.round(Number(params.price));
+  if (!Number.isFinite(price) || price < 0) {
+    throw new Error('Precio inválido.');
+  }
+
+  const p = await getPool();
+  const prod = await getProductById(productId);
+  if (!prod) {
+    throw new Error('Producto no encontrado.');
+  }
+
+  const variantId = params.variantId?.trim() || null;
+
+  if (variantId) {
+    if (!prod.variants?.length) {
+      throw new Error('Este producto no tiene variantes.');
+    }
+    let found = false;
+    const next = prod.variants.map((v) => {
+      if (v.id === variantId) {
+        found = true;
+        return { ...v, price };
+      }
+      return v;
+    });
+    if (!found) {
+      throw new Error('Variante no encontrada.');
+    }
+    await p.query('UPDATE products SET variants_json = ? WHERE id = ?', [
+      JSON.stringify(next),
+      productId,
+    ]);
+    return;
+  }
+
+  if (prod.variants?.length) {
+    throw new Error('Este producto tiene variantes: editá el precio en cada variante.');
+  }
+
+  await p.query('UPDATE products SET price = ? WHERE id = ?', [price, productId]);
+}
+
 export async function getProductById(id: string): Promise<Product | null> {
   const p = await getPool();
   const [rows] = await p.query<RowDataPacket[]>(

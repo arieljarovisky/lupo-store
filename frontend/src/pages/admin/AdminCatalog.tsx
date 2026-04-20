@@ -1,9 +1,78 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, ExternalLink, Search } from 'lucide-react';
 import { useProductCatalog } from '../../context/ProductCatalogContext';
 import type { Product } from '../../context/CartContext';
 import { articleCodeFromProduct, parseLupoSku13 } from '../../lib/lupoSku';
+import { adminPatchProductPrice } from '../../lib/api';
+
+function AdminPriceEditor({
+  productId,
+  variantId,
+  initialPrice,
+  onSaved,
+}: {
+  productId: string;
+  variantId: string | null;
+  initialPrice: number;
+  onSaved: () => void;
+}) {
+  const [value, setValue] = useState(String(initialPrice));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setValue(String(initialPrice));
+  }, [initialPrice, productId, variantId]);
+
+  const save = async () => {
+    const n = Number(String(value).replace(',', '.').trim());
+    if (!Number.isFinite(n) || n < 0) {
+      setErr('Precio inválido');
+      return;
+    }
+    setErr(null);
+    setSaving(true);
+    const r = await adminPatchProductPrice({
+      productId,
+      price: Math.round(n),
+      variantId: variantId ?? undefined,
+    });
+    setSaving(false);
+    if ('error' in r) {
+      setErr(r.error);
+      return;
+    }
+    onSaved();
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <span className="text-[11px] text-[#888]">$</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="w-[88px] border border-[#ddd] px-2 py-1 text-right text-[13px] tabular-nums"
+          aria-label="Precio"
+        />
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          className="text-[10px] uppercase tracking-wide bg-lupo-black text-white px-2.5 py-1.5 hover:bg-black/85 disabled:opacity-50"
+        >
+          {saving ? '…' : 'Guardar'}
+        </button>
+      </div>
+      {err && (
+        <span className="text-[10px] text-red-600 max-w-[220px] text-right leading-tight">{err}</span>
+      )}
+    </div>
+  );
+}
 
 function stockClass(qty: number): string {
   if (qty <= 0) return 'text-red-600 font-medium';
@@ -20,7 +89,7 @@ function totalStockForProduct(p: Product): number {
 }
 
 export function AdminCatalog() {
-  const { products, loading, error } = useProductCatalog();
+  const { products, loading, error, refetch } = useProductCatalog();
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get('q') ?? '';
   const setQuery = (value: string) => {
@@ -60,7 +129,7 @@ export function AdminCatalog() {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const variantRows = (p: Product, isOpen: boolean) => {
+  const variantRows = (p: Product, isOpen: boolean, onPriceSaved: () => void) => {
     const list = p.variants;
     if (!list?.length) return null;
     return (
@@ -106,7 +175,14 @@ export function AdminCatalog() {
                                 </span>
                               )}
                             </td>
-                            <td className="py-2 px-3 text-right tabular-nums">${v.price.toFixed(2)}</td>
+                            <td className="py-2 px-3 text-right">
+                              <AdminPriceEditor
+                                productId={p.id}
+                                variantId={v.id}
+                                initialPrice={v.price}
+                                onSaved={onPriceSaved}
+                              />
+                            </td>
                             <td className="py-2 px-3 text-right tabular-nums">
                               <span className={stockClass(v.stockQuantity ?? 0)}>{v.stockQuantity ?? 0}</span>
                             </td>
@@ -220,7 +296,18 @@ export function AdminCatalog() {
                           )}
                         </td>
                         <td className="py-3 px-4 text-lupo-text">{p.category}</td>
-                        <td className="py-3 px-4 text-right tabular-nums">${p.price.toFixed(2)}</td>
+                        <td className="py-3 px-4 text-right align-top">
+                          {hasVariants ? (
+                            <span className="text-[12px] text-[#999] inline-block pt-1">Por variante</span>
+                          ) : (
+                            <AdminPriceEditor
+                              productId={p.id}
+                              variantId={null}
+                              initialPrice={p.price}
+                              onSaved={refetch}
+                            />
+                          )}
+                        </td>
                         <td className="py-3 px-4 text-right tabular-nums">
                           <span className={stockClass(totalStockForProduct(p))}>{totalStockForProduct(p)}</span>
                         </td>
@@ -234,7 +321,7 @@ export function AdminCatalog() {
                           </Link>
                         </td>
                       </tr>
-                      {hasVariants ? variantRows(p, isOpen) : null}
+                      {hasVariants ? variantRows(p, isOpen, refetch) : null}
                     </Fragment>
                   );
                 })}

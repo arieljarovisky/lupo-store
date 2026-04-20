@@ -83,6 +83,21 @@ function messageFromMercadoPagoError(err: unknown): string {
   return String(err);
 }
 
+/** Mensaje técnico del SDK → texto útil para el usuario. */
+function friendlyMercadoPagoFormError(raw: string): string {
+  const t = raw.trim();
+  if (/payer_costs|Cannot destructure|get_installments/i.test(t)) {
+    return (
+      'Mercado Pago no pudo cargar las cuotas (respuesta incompleta de la API). Lo más frecuente: ' +
+      'clave pública de prueba con tarjeta de producción o al revés; monto del pedido muy bajo; o un fallo puntual de MP. ' +
+      'Revisá que VITE_MERCADO_PAGO_PUBLIC_KEY y MERCADO_PAGO_ACCESS_TOKEN sean ambas de prueba o ambas de producción, ' +
+      'probá otra tarjeta de prueba oficial y un monto mayor (ej. > $100). Detalle técnico: ' +
+      t
+    );
+  }
+  return t;
+}
+
 function loadMercadoPagoSdk(): Promise<void> {
   if (typeof window !== 'undefined' && window.MercadoPago) {
     return Promise.resolve();
@@ -228,7 +243,6 @@ export function Checkout() {
         const cardForm = mp.cardForm({
           amount: mercadoPagoAmountString(paymentTotal),
           iframe: true,
-          processingMode: 'aggregator',
           form: {
             id: 'form-checkout',
             cardNumber: {
@@ -262,11 +276,6 @@ export function Checkout() {
               }
               setCardFormReady(true);
             },
-            onInstallmentsReceived: (installmentsError?: unknown) => {
-              if (cancelled) return;
-              const msg = messageFromMercadoPagoError(installmentsError);
-              if (msg) setCardFormError(msg);
-            },
             onSubmit: async (event: Event) => {
               event.preventDefault();
               const data = cardForm.getCardFormData();
@@ -280,8 +289,10 @@ export function Checkout() {
             },
             onError: (mpError: unknown) => {
               if (cancelled) return;
-              const msg = messageFromMercadoPagoError(mpError);
-              setCardFormError(msg || 'Error en el formulario de tarjeta.');
+              const raw = messageFromMercadoPagoError(mpError);
+              setCardFormError(
+                raw ? friendlyMercadoPagoFormError(raw) : 'Error en el formulario de tarjeta.'
+              );
             },
           },
         });

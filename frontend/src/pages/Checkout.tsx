@@ -135,6 +135,7 @@ export function Checkout() {
   const [checkoutFallbackUrl, setCheckoutFallbackUrl] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>('mercado_pago');
   const [cardFormReady, setCardFormReady] = useState(false);
+  const [issuerDisplayName, setIssuerDisplayName] = useState('Banco emisor');
   const cardFormRef = useRef<MercadoPagoCardFormInstance | null>(null);
   const mpPublicKey = import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY?.trim() || '';
 
@@ -221,6 +222,7 @@ export function Checkout() {
     if (paymentMethod !== 'card') {
       setCardFormReady(false);
       setCardFormError(null);
+      setIssuerDisplayName('Banco emisor');
       unmountCardFormSafely();
       return;
     }
@@ -262,7 +264,7 @@ export function Checkout() {
               style: { ...MP_IFRAME_FIELD_STYLE },
             },
             cardholderName: { id: 'form-checkout__cardholderName', placeholder: 'Titular de la tarjeta' },
-            issuer: { id: 'form-checkout__issuer', placeholder: 'Banco emisor' },
+            issuer: { id: 'form-checkout__issuerHidden', placeholder: 'Banco emisor' },
             installments: { id: 'form-checkout__installments', placeholder: 'Cuotas' },
             identificationType: { id: 'form-checkout__identificationType', placeholder: 'Tipo de documento' },
             identificationNumber: { id: 'form-checkout__identificationNumber', placeholder: 'Número de documento' },
@@ -328,6 +330,28 @@ export function Checkout() {
     holder.value = mainEmail;
     holder.dispatchEvent(new Event('input', { bubbles: true }));
     holder.dispatchEvent(new Event('change', { bubbles: true }));
+  }, [paymentMethod, cardFormReady]);
+
+  useEffect(() => {
+    if (paymentMethod !== 'card' || !cardFormReady) return;
+    const issuer = document.getElementById('form-checkout__issuerHidden') as HTMLSelectElement | null;
+    if (!issuer) return;
+
+    const syncIssuerName = () => {
+      const option = issuer.selectedOptions?.[0];
+      const name = option?.textContent?.trim() || '';
+      setIssuerDisplayName(name || 'Banco emisor');
+    };
+
+    const observer = new MutationObserver(syncIssuerName);
+    observer.observe(issuer, { attributes: true, childList: true, subtree: true });
+    issuer.addEventListener('change', syncIssuerName);
+    syncIssuerName();
+
+    return () => {
+      observer.disconnect();
+      issuer.removeEventListener('change', syncIssuerName);
+    };
   }, [paymentMethod, cardFormReady]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -686,10 +710,30 @@ export function Checkout() {
 
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-5">
                         <div className="min-w-0 flex flex-col">
-                          <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black" htmlFor="form-checkout__issuer">
+                          <label
+                            className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black"
+                            htmlFor="form-checkout__issuer_display"
+                          >
                             Banco emisor
                           </label>
-                          <select id="form-checkout__issuer" className={`${inputClass} cursor-pointer`} />
+                          <div className="relative">
+                            <Landmark
+                              size={18}
+                              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-lupo-muted"
+                              aria-hidden
+                            />
+                            <input
+                              id="form-checkout__issuer_display"
+                              value={issuerDisplayName}
+                              readOnly
+                              className={`${inputClass} pl-10 pr-10`}
+                            />
+                            <select
+                              id="form-checkout__issuerHidden"
+                              className="absolute inset-0 h-12 w-full cursor-pointer opacity-0"
+                              aria-label="Banco emisor"
+                            />
+                          </div>
                         </div>
                         <div className="min-w-0 flex flex-col">
                           <label className="mb-2 block min-h-[28px] text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black" htmlFor="form-checkout__installments">

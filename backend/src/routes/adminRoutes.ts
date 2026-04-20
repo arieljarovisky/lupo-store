@@ -11,13 +11,14 @@ adminRouter.use(requireAdmin);
 adminRouter.patch('/products/:productId/price', async (req, res) => {
   try {
     const productId = String(req.params.productId ?? '').trim();
-    const body = req.body as { price?: unknown; variantId?: unknown };
+    const body = req.body as { price?: unknown; variantId?: unknown; applyToAllVariants?: unknown };
     const price = Number(body.price);
     const variantId =
       body.variantId != null && String(body.variantId).trim() !== ''
         ? String(body.variantId).trim()
         : null;
-    await updateProductOrVariantPrice({ productId, price, variantId });
+    const applyToAllVariants = Boolean(body.applyToAllVariants);
+    await updateProductOrVariantPrice({ productId, price, variantId, applyToAllVariants });
     res.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'No se pudo actualizar el precio.';

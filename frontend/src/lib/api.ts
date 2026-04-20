@@ -436,6 +436,8 @@ export async function adminPatchProductPrice(params: {
   productId: string;
   price: number;
   variantId?: string | null;
+  /** Actualiza la columna `price` del producto y el precio de cada variante. */
+  applyToAllVariants?: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const base = apiBase();
   const id = encodeURIComponent(params.productId);
@@ -447,6 +449,7 @@ export async function adminPatchProductPrice(params: {
       body: JSON.stringify({
         price: params.price,
         ...(params.variantId ? { variantId: params.variantId } : {}),
+        ...(params.applyToAllVariants ? { applyToAllVariants: true } : {}),
       }),
     });
     const text = await res.text();

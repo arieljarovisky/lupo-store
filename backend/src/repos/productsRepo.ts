@@ -143,6 +143,8 @@ export async function updateProductOrVariantPrice(params: {
   productId: string;
   price: number;
   variantId?: string | null;
+  /** Si el producto tiene variantes y no se envía `variantId`, actualiza `price` y el precio de cada variante. */
+  applyToAllVariants?: boolean;
 }): Promise<void> {
   const productId = params.productId.trim();
   if (!productId) {
@@ -160,6 +162,7 @@ export async function updateProductOrVariantPrice(params: {
   }
 
   const variantId = params.variantId?.trim() || null;
+  const applyToAllVariants = Boolean(params.applyToAllVariants);
 
   if (variantId) {
     if (!prod.variants?.length) {
@@ -184,7 +187,18 @@ export async function updateProductOrVariantPrice(params: {
   }
 
   if (prod.variants?.length) {
-    throw new Error('Este producto tiene variantes: editá el precio en cada variante.');
+    if (applyToAllVariants) {
+      const next = prod.variants.map((v) => ({ ...v, price }));
+      await p.query('UPDATE products SET price = ?, variants_json = ? WHERE id = ?', [
+        price,
+        JSON.stringify(next),
+        productId,
+      ]);
+      return;
+    }
+    throw new Error(
+      'Este producto tiene variantes: indicá applyToAllVariants o editá el precio por variante.'
+    );
   }
 
   await p.query('UPDATE products SET price = ? WHERE id = ?', [price, productId]);

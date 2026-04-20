@@ -11,11 +11,14 @@ function AdminPriceEditor({
   variantId,
   initialPrice,
   onSaved,
+  applyToAllVariants,
 }: {
   productId: string;
   variantId: string | null;
   initialPrice: number;
   onSaved: () => void;
+  /** Si es true, actualiza el precio del producto y de todas las variantes a la vez. */
+  applyToAllVariants?: boolean;
 }) {
   const [value, setValue] = useState(String(initialPrice));
   const [saving, setSaving] = useState(false);
@@ -37,6 +40,7 @@ function AdminPriceEditor({
       productId,
       price: Math.round(n),
       variantId: variantId ?? undefined,
+      applyToAllVariants: applyToAllVariants ? true : undefined,
     });
     setSaving(false);
     if ('error' in r) {
@@ -48,6 +52,11 @@ function AdminPriceEditor({
 
   return (
     <div className="flex flex-col items-end gap-1">
+      {applyToAllVariants && (
+        <span className="text-[10px] text-[#888] max-w-[220px] text-right leading-tight">
+          Todas las variantes
+        </span>
+      )}
       <div className="flex flex-wrap items-center justify-end gap-2">
         <span className="text-[11px] text-[#888]">$</span>
         <input
@@ -72,6 +81,15 @@ function AdminPriceEditor({
       )}
     </div>
   );
+}
+
+/** Precio mostrado en la fila principal si hay variantes: común a todas o el del producto. */
+function displayPriceForVariantsProduct(p: Product): number {
+  const v = p.variants;
+  if (!v?.length) return p.price;
+  const first = v[0].price;
+  if (v.every((x) => x.price === first)) return first;
+  return p.price;
 }
 
 function stockClass(qty: number): string {
@@ -298,7 +316,13 @@ export function AdminCatalog() {
                         <td className="py-3 px-4 text-lupo-text">{p.category}</td>
                         <td className="py-3 px-4 text-right align-top">
                           {hasVariants ? (
-                            <span className="text-[12px] text-[#999] inline-block pt-1">Por variante</span>
+                            <AdminPriceEditor
+                              productId={p.id}
+                              variantId={null}
+                              initialPrice={displayPriceForVariantsProduct(p)}
+                              onSaved={refetch}
+                              applyToAllVariants
+                            />
                           ) : (
                             <AdminPriceEditor
                               productId={p.id}

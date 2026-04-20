@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { getPool } from '../pool.js';
 import { getProductById, restoreStockForCancelledOrderLine } from './productsRepo.js';
 import type { Order, OrderItem, PaymentMethod } from '../types.js';
+import {
+  micorreoDefaultDimensions,
+  micorreoFetchRates,
+  micorreoIsConfigured,
+} from '../services/micorreo.js';
 
 const INSTALLMENT_INTEREST_RATE: Record<number, number> = {
   1: 0,
@@ -100,14 +105,19 @@ async function createMercadoPagoPreference(params: {
   };
 }
 
+export type CheckoutShippingEngine = 'micorreo' | 'local';
+
 export interface CheckoutShippingQuoteOption {
   id: string;
-  provider: 'tiendanube';
+  provider: 'tiendanube' | 'micorreo';
   carrier: 'correo_argentino';
   label: string;
   cost: number;
   minDays: number;
   maxDays: number;
+  /** Solo MiCorreo: D domicilio, S sucursal/depósito. */
+  deliveredType?: 'D' | 'S';
+  productType?: string | null;
 }
 
 function normalizeZipcode(raw: string): string {
@@ -116,33 +126,11 @@ function normalizeZipcode(raw: string): string {
   return t.replace(/[^A-Z0-9]/g, '');
 }
 
-/**
- * Cotización local compatible con flujo de Tienda Nube + Correo Argentino.
- * Se basa en CP y subtotal para ofrecer estándar/exprés y envío gratis configurable.
- */
-export async function quoteCheckoutShipping(params: {
-  items: { productId: string; quantity: number }[];
-  address: { zipcode: string; city?: string | null; province?: string | null; country?: string | null };
-}): Promise<{ currency: 'ARS'; subtotal: number; options: CheckoutShippingQuoteOption[] }> {
-  const zipcode = normalizeZipcode(params.address.zipcode);
-  if (zipcode.length < 4) {
-    throw new Error('Ingresá un código postal válido para calcular el envío.');
-  }
-  if (params.items.length === 0) {
-    throw new Error('El carrito está vacío.');
-  }
-
-  let subtotal = 0;
-  for (const it of params.items) {
-    const qty = Math.max(0, Math.floor(Number(it.quantity)));
-    if (qty <= 0) continue;
-    const prod = await getProductById(String(it.productId));
-    if (!prod) {
-      throw new Error(`Producto no encontrado: ${it.productId}`);
-    }
-    subtotal += qty * Math.round(Number(prod.price) || 0);
-  }
-
+function quoteCheckoutShippingLocal(params: {
+  zipcode: string;
+  subtotal: number;
+}): CheckoutShippingQuoteOption[] {
+  const { zipcode, subtotal } = params;
   const freeOver = Math.max(0, Math.round(Number(process.env.SHIPPING_FREE_OVER_ARS ?? '0') || 0));
   const digits = zipcode.replace(/\D/g, '');
   const prefix2 = digits.slice(0, 2);
@@ -164,6 +152,7 @@ export async function quoteCheckoutShipping(params: {
       cost: 0,
       minDays: standardDays.min,
       maxDays: standardDays.max,
+      deliveredType: 'D',
     });
   }
   options.push(
@@ -175,6 +164,7 @@ export async function quoteCheckoutShipping(params: {
       cost: standardCost,
       minDays: standardDays.min,
       maxDays: standardDays.max,
+      deliveredType: 'D',
     },
     {
       id: 'correo_argentino_express',
@@ -184,13 +174,115 @@ export async function quoteCheckoutShipping(params: {
       cost: expressCost,
       minDays: expressDays.min,
       maxDays: expressDays.max,
+      deliveredType: 'D',
     }
   );
+  return options;
+}
+
+/**
+ * Cotización: si hay credenciales MiCorreo, usa POST /rates (Correo Argentino oficial).
+ * Si no, mantiene la cotización local (Tienda Nube / heurística por CP).
+ */
+export async function quoteCheckoutShipping(params: {
+  items: { productId: string; quantity: number }[];
+  address: { zipcode: string; city?: string | null; province?: string | null; country?: string | null };
+  deliveredType?: 'D' | 'S';
+}): Promise<{
+  currency: 'ARS';
+  subtotal: number;
+  options: CheckoutShippingQuoteOption[];
+  shippingEngine: CheckoutShippingEngine;
+}> {
+  const zipcode = normalizeZipcode(params.address.zipcode);
+  if (zipcode.length < 4) {
+    throw new Error('Ingresá un código postal válido para calcular el envío.');
+  }
+  if (params.items.length === 0) {
+    throw new Error('El carrito está vacío.');
+  }
+
+  let subtotal = 0;
+  for (const it of params.items) {
+    const qty = Math.max(0, Math.floor(Number(it.quantity)));
+    if (qty <= 0) continue;
+    const prod = await getProductById(String(it.productId));
+    if (!prod) {
+      throw new Error(`Producto no encontrado: ${it.productId}`);
+    }
+    subtotal += qty * Math.round(Number(prod.price) || 0);
+  }
+
+  const deliveredType: 'D' | 'S' = params.deliveredType === 'S' ? 'S' : 'D';
+  const freeOver = Math.max(0, Math.round(Number(process.env.SHIPPING_FREE_OVER_ARS ?? '0') || 0));
+
+  if (micorreoIsConfigured()) {
+    const origin = normalizeZipcode(process.env.MICORREO_POSTAL_CODE_ORIGIN ?? '');
+    if (origin.length < 4) {
+      throw new Error('MICORREO_POSTAL_CODE_ORIGIN inválido o demasiado corto.');
+    }
+    const dimensions = micorreoDefaultDimensions();
+    const rows = await micorreoFetchRates({
+      postalCodeOrigin: origin,
+      postalCodeDestination: zipcode,
+      deliveredType,
+      dimensions,
+    });
+
+    const options: CheckoutShippingQuoteOption[] = [];
+    const modeLabel = deliveredType === 'S' ? 'retiro en sucursal' : 'a domicilio';
+
+    for (const r of rows) {
+      const dt = r.deliveredType === 'S' ? 'S' : 'D';
+      if (dt !== deliveredType) continue;
+      const minDays = Math.max(0, Math.floor(Number(r.deliveryTimeMin) || 0));
+      const maxDays = Math.max(minDays, Math.floor(Number(r.deliveryTimeMax) || minDays));
+      const cost = Math.max(0, Math.round(Number(r.price) || 0));
+      options.push({
+        id: `micorreo:${r.productType}:${dt}`,
+        provider: 'micorreo',
+        carrier: 'correo_argentino',
+        label: `${r.productName} — ${modeLabel}`,
+        cost,
+        minDays: minDays || 1,
+        maxDays: maxDays || minDays || 1,
+        deliveredType: dt,
+        productType: r.productType,
+      });
+    }
+
+    if (freeOver > 0 && subtotal >= freeOver && options.length > 0) {
+      const cheapest = options.reduce((a, b) => (a.cost <= b.cost ? a : b));
+      options.unshift({
+        id: 'micorreo_free',
+        provider: 'micorreo',
+        carrier: 'correo_argentino',
+        label: `Promoción envío gratis (${modeLabel})`,
+        cost: 0,
+        minDays: cheapest.minDays,
+        maxDays: cheapest.maxDays,
+        deliveredType,
+        productType: cheapest.productType ?? null,
+      });
+    }
+
+    if (options.length === 0) {
+      throw new Error('MiCorreo no devolvió tarifas para ese código postal y tipo de entrega.');
+    }
+
+    return {
+      currency: 'ARS',
+      subtotal,
+      options,
+      shippingEngine: 'micorreo',
+    };
+  }
 
   return {
     currency: 'ARS',
     subtotal,
-    options,
+    options: quoteCheckoutShippingLocal({ zipcode, subtotal }),
+    shippingEngine: 'local',
   };
 }
 
@@ -207,6 +299,10 @@ export async function createCheckoutOrder(params: {
   shippingOptionId?: string | null;
   shippingProvider?: string | null;
   shippingZipcode?: string | null;
+  shippingAgencyCode?: string | null;
+  shippingAgencyName?: string | null;
+  shippingDeliveredType?: 'D' | 'S' | null;
+  shippingProductType?: string | null;
 }): Promise<{ orderId: number; checkoutUrl: string | null }> {
   const email = params.guestEmail?.trim() || null;
   const phone = params.guestPhone?.trim() || null;
@@ -231,6 +327,10 @@ export async function createCheckoutOrder(params: {
   const shippingOptionId = params.shippingOptionId?.trim() || null;
   const shippingProvider = params.shippingProvider?.trim() || null;
   const shippingZipcode = params.shippingZipcode?.trim() || null;
+  const shippingAgencyCode = params.shippingAgencyCode?.trim() || null;
+  const shippingAgencyName = params.shippingAgencyName?.trim() || null;
+  const shippingDeliveredType = params.shippingDeliveredType === 'S' ? 'S' : params.shippingDeliveredType === 'D' ? 'D' : null;
+  const shippingProductType = params.shippingProductType?.trim() || null;
 
   const p = await getPool();
   const conn = await p.getConnection();
@@ -278,6 +378,9 @@ export async function createCheckoutOrder(params: {
       shippingOptionId ? `Envío opción: ${shippingOptionId}` : null,
       shippingProvider ? `Envío proveedor: ${shippingProvider}` : null,
       shippingZipcode ? `Envío CP: ${shippingZipcode}` : null,
+      shippingDeliveredType ? `Envío tipo entrega: ${shippingDeliveredType === 'S' ? 'sucursal' : 'domicilio'}` : null,
+      shippingProductType ? `Envío producto Correo: ${shippingProductType}` : null,
+      shippingAgencyCode ? `Sucursal MiCorreo: ${shippingAgencyCode}${shippingAgencyName ? ` (${shippingAgencyName})` : ''}` : null,
       `Envío costo: ARS ${shippingCost}`,
     ]
       .filter(Boolean)

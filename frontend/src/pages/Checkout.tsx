@@ -13,11 +13,42 @@ import {
 } from 'lucide-react';
 import {
   createCheckoutOrder,
+  fetchMicorreoAgencies,
   payOrderWithMercadoPagoCard,
   quoteCheckoutShipping,
   type CheckoutPaymentMethod,
+  type CheckoutShippingEngine,
   type CheckoutShippingQuoteOption,
+  type MicorreoAgencyOption,
 } from '../lib/api';
+
+/** Letra de provincia según CPA (Correo / MiCorreo). */
+const AR_CPA_PROVINCES: { code: string; name: string }[] = [
+  { code: 'C', name: 'Ciudad Autónoma de Buenos Aires' },
+  { code: 'B', name: 'Buenos Aires' },
+  { code: 'K', name: 'Catamarca' },
+  { code: 'H', name: 'Chaco' },
+  { code: 'U', name: 'Chubut' },
+  { code: 'X', name: 'Córdoba' },
+  { code: 'W', name: 'Corrientes' },
+  { code: 'E', name: 'Entre Ríos' },
+  { code: 'P', name: 'Formosa' },
+  { code: 'Y', name: 'Jujuy' },
+  { code: 'L', name: 'La Pampa' },
+  { code: 'F', name: 'La Rioja' },
+  { code: 'M', name: 'Mendoza' },
+  { code: 'N', name: 'Misiones' },
+  { code: 'Q', name: 'Neuquén' },
+  { code: 'R', name: 'Río Negro' },
+  { code: 'A', name: 'Salta' },
+  { code: 'J', name: 'San Juan' },
+  { code: 'D', name: 'San Luis' },
+  { code: 'Z', name: 'Santa Cruz' },
+  { code: 'S', name: 'Santa Fe' },
+  { code: 'G', name: 'Santiago del Estero' },
+  { code: 'V', name: 'Tierra del Fuego' },
+  { code: 'T', name: 'Tucumán' },
+];
 
 function paymentLabel(method: CheckoutPaymentMethod): string {
   if (method === 'mercado_pago') return 'Mercado Pago';
@@ -141,6 +172,13 @@ export function Checkout() {
   const [shippingZipcode, setShippingZipcode] = useState('');
   const [shippingCity, setShippingCity] = useState('');
   const [shippingProvince, setShippingProvince] = useState('');
+  const [shippingDeliveredType, setShippingDeliveredType] = useState<'D' | 'S'>('D');
+  const [shippingProvinceCodePickup, setShippingProvinceCodePickup] = useState('');
+  const [shippingEngine, setShippingEngine] = useState<CheckoutShippingEngine | null>(null);
+  const [agencies, setAgencies] = useState<MicorreoAgencyOption[]>([]);
+  const [agenciesLoading, setAgenciesLoading] = useState(false);
+  const [agenciesError, setAgenciesError] = useState<string | null>(null);
+  const [selectedAgency, setSelectedAgency] = useState<MicorreoAgencyOption | null>(null);
   const [shippingOptions, setShippingOptions] = useState<CheckoutShippingQuoteOption[]>([]);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState<string | null>(null);
@@ -187,8 +225,22 @@ export function Checkout() {
       setError('Completá ciudad y código postal para calcular y elegir un envío antes de pagar.');
       return;
     }
+    if (shippingEngine === 'micorreo' && shippingDeliveredType === 'S') {
+      if (!shippingProvinceCodePickup.trim()) {
+        setError('Elegí la provincia de la sucursal donde vas a retirar el pedido.');
+        return;
+      }
+      if (!selectedAgency) {
+        setError('Elegí la sucursal de Correo Argentino para el retiro.');
+        return;
+      }
+    }
 
-    const paymentNotes = `Cliente: ${firstName} ${lastName}\nDirección: ${address}, ${city} (${zip})`;
+    const pickupLine =
+      shippingEngine === 'micorreo' && shippingDeliveredType === 'S' && selectedAgency
+        ? `\nRetiro en sucursal: ${selectedAgency.name} (${selectedAgency.code}) — ${[selectedAgency.street, selectedAgency.locality, selectedAgency.postalCode].filter(Boolean).join(', ')}`
+        : '';
+    const paymentNotes = `Cliente: ${firstName} ${lastName}\nDirección: ${address}, ${city} (${zip})${pickupLine}`;
 
     setError(null);
     setIsSubmitting(true);
@@ -204,6 +256,16 @@ export function Checkout() {
       shippingOptionId: selectedShipping.id,
       shippingProvider: selectedShipping.provider,
       shippingZipcode: zip,
+      shippingAgencyCode:
+        shippingEngine === 'micorreo' && shippingDeliveredType === 'S' && selectedAgency
+          ? selectedAgency.code
+          : undefined,
+      shippingAgencyName:
+        shippingEngine === 'micorreo' && shippingDeliveredType === 'S' && selectedAgency
+          ? [selectedAgency.name, selectedAgency.locality].filter(Boolean).join(' — ')
+          : undefined,
+      shippingDeliveredType: shippingEngine === 'micorreo' ? shippingDeliveredType : undefined,
+      shippingProductType: selectedShipping.productType ?? undefined,
     });
     if ('error' in orderResult) {
       setIsSubmitting(false);
@@ -383,6 +445,7 @@ export function Checkout() {
       setSelectedShippingId(null);
       setShippingLoading(false);
       setShippingError(null);
+      setShippingEngine(null);
       return;
     }
 
@@ -393,6 +456,7 @@ export function Checkout() {
     const timer = window.setTimeout(async () => {
       const r = await quoteCheckoutShipping({
         items: items.map((item) => ({ productId: item.id, quantity: item.quantity })),
+        deliveredType: shippingDeliveredType,
         address: {
           zipcode,
           city,
@@ -405,9 +469,11 @@ export function Checkout() {
       if ('error' in r) {
         setShippingOptions([]);
         setSelectedShippingId(null);
+        setShippingEngine(null);
         setShippingError(r.error);
         return;
       }
+      setShippingEngine(r.shippingEngine);
       setShippingOptions(r.options);
       setSelectedShippingId((prev) => (prev && r.options.some((o) => o.id === prev) ? prev : (r.options[0]?.id ?? null)));
     }, 450);
@@ -416,7 +482,51 @@ export function Checkout() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [items, shippingZipcode, shippingCity, shippingProvince]);
+  }, [items, shippingZipcode, shippingCity, shippingProvince, shippingDeliveredType]);
+
+  useEffect(() => {
+    if (shippingEngine !== 'micorreo' || shippingDeliveredType !== 'S') {
+      setAgencies([]);
+      setAgenciesError(null);
+      setAgenciesLoading(false);
+      setSelectedAgency(null);
+      return;
+    }
+    const pc = shippingProvinceCodePickup.trim().toUpperCase();
+    if (!pc) {
+      setAgencies([]);
+      setSelectedAgency(null);
+      setAgenciesError(null);
+      setAgenciesLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setAgenciesLoading(true);
+    setAgenciesError(null);
+
+    const t = window.setTimeout(async () => {
+      const r = await fetchMicorreoAgencies(pc);
+      if (cancelled) return;
+      setAgenciesLoading(false);
+      if (r.ok === false) {
+        setAgencies([]);
+        setSelectedAgency(null);
+        setAgenciesError(r.error);
+        return;
+      }
+      setAgencies(r.agencies);
+      setSelectedAgency((prev) => {
+        if (prev && r.agencies.some((a) => a.code === prev.code)) return prev;
+        return null;
+      });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [shippingEngine, shippingDeliveredType, shippingProvinceCodePickup]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -442,7 +552,23 @@ export function Checkout() {
       setError('Completá ciudad y código postal para calcular y elegir un envío antes de confirmar.');
       return;
     }
-    const paymentNotes = `Cliente: ${firstName} ${lastName}\nDirección: ${address}, ${city} (${zip})`;
+    if (shippingEngine === 'micorreo' && shippingDeliveredType === 'S') {
+      if (!shippingProvinceCodePickup.trim()) {
+        setIsSubmitting(false);
+        setError('Elegí la provincia de la sucursal donde vas a retirar el pedido.');
+        return;
+      }
+      if (!selectedAgency) {
+        setIsSubmitting(false);
+        setError('Elegí la sucursal de Correo Argentino para el retiro.');
+        return;
+      }
+    }
+    const pickupLine =
+      shippingEngine === 'micorreo' && shippingDeliveredType === 'S' && selectedAgency
+        ? `\nRetiro en sucursal: ${selectedAgency.name} (${selectedAgency.code}) — ${[selectedAgency.street, selectedAgency.locality, selectedAgency.postalCode].filter(Boolean).join(', ')}`
+        : '';
+    const paymentNotes = `Cliente: ${firstName} ${lastName}\nDirección: ${address}, ${city} (${zip})${pickupLine}`;
 
     const result = await createCheckoutOrder({
       items: items.map((item) => ({ productId: item.id, quantity: item.quantity })),
@@ -456,6 +582,16 @@ export function Checkout() {
       shippingOptionId: selectedShipping.id,
       shippingProvider: selectedShipping.provider,
       shippingZipcode: zip,
+      shippingAgencyCode:
+        shippingEngine === 'micorreo' && shippingDeliveredType === 'S' && selectedAgency
+          ? selectedAgency.code
+          : undefined,
+      shippingAgencyName:
+        shippingEngine === 'micorreo' && shippingDeliveredType === 'S' && selectedAgency
+          ? [selectedAgency.name, selectedAgency.locality].filter(Boolean).join(' — ')
+          : undefined,
+      shippingDeliveredType: shippingEngine === 'micorreo' ? shippingDeliveredType : undefined,
+      shippingProductType: selectedShipping.productType ?? undefined,
     });
 
     setIsSubmitting(false);
@@ -665,8 +801,126 @@ export function Checkout() {
               </h2>
               <h3 className="text-[20px] font-medium mb-2 text-lupo-black">Envío</h3>
               <p className="text-[13px] text-lupo-text mb-5">
-                Calculamos opciones de Correo Argentino (integración Tienda Nube) según tu dirección.
+                {shippingEngine === 'micorreo'
+                  ? 'Cotización con la API oficial MiCorreo de Correo Argentino según tu código postal, tipo de entrega y sucursal si retirás.'
+                  : 'Calculamos opciones de envío según tu dirección (modo local si MiCorreo no está configurado en el servidor).'}
               </p>
+
+              {shippingEngine === 'micorreo' && (
+                <div className="mb-5 space-y-4 rounded-xl border border-lupo-border bg-lupo-gray/30 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black">
+                    Tipo de entrega
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
+                    <label
+                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-[13px] ${
+                        shippingDeliveredType === 'D'
+                          ? 'border-lupo-black bg-white'
+                          : 'border-lupo-border bg-white/80 hover:border-[#ccc]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="deliveredType"
+                        className="accent-lupo-black"
+                        checked={shippingDeliveredType === 'D'}
+                        onChange={() => {
+                          setShippingDeliveredType('D');
+                          setSelectedAgency(null);
+                        }}
+                      />
+                      Entrega a domicilio
+                    </label>
+                    <label
+                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-[13px] ${
+                        shippingDeliveredType === 'S'
+                          ? 'border-lupo-black bg-white'
+                          : 'border-lupo-border bg-white/80 hover:border-[#ccc]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="deliveredType"
+                        className="accent-lupo-black"
+                        checked={shippingDeliveredType === 'S'}
+                        onChange={() => setShippingDeliveredType('S')}
+                      />
+                      Retiro en sucursal / depósito
+                    </label>
+                  </div>
+
+                  {shippingDeliveredType === 'S' && (
+                    <div className="space-y-3 border-t border-lupo-border pt-4">
+                      <div>
+                        <label
+                          htmlFor="provincePickup"
+                          className="mb-2 block text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black"
+                        >
+                          Provincia de la sucursal (letra CPA)
+                        </label>
+                        <select
+                          id="provincePickup"
+                          className={inputClass}
+                          value={shippingProvinceCodePickup}
+                          onChange={(e) => {
+                            setShippingProvinceCodePickup(e.target.value);
+                            setSelectedAgency(null);
+                          }}
+                        >
+                          <option value="">Elegí provincia…</option>
+                          {AR_CPA_PROVINCES.map((p) => (
+                            <option key={p.code} value={p.code}>
+                              {p.code} — {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {agenciesLoading ? (
+                        <div className="flex items-center gap-2 text-[13px] text-lupo-text">
+                          <Loader2 size={16} className="animate-spin" />
+                          Cargando sucursales…
+                        </div>
+                      ) : agenciesError ? (
+                        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
+                          {agenciesError}
+                        </div>
+                      ) : agencies.length > 0 ? (
+                        <div>
+                          <label
+                            htmlFor="agencyPickup"
+                            className="mb-2 block text-[11px] font-semibold uppercase tracking-[1px] text-lupo-black"
+                          >
+                            Sucursal
+                          </label>
+                          <select
+                            id="agencyPickup"
+                            className={inputClass}
+                            value={selectedAgency?.code ?? ''}
+                            onChange={(e) => {
+                              const code = e.target.value;
+                              setSelectedAgency(agencies.find((a) => a.code === code) ?? null);
+                            }}
+                          >
+                            <option value="">Elegí sucursal…</option>
+                            {agencies.map((a) => (
+                              <option key={a.code} value={a.code}>
+                                {a.name} — {a.locality}
+                                {a.postalCode ? ` (${a.postalCode})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : shippingProvinceCodePickup ? (
+                        <p className="text-[12px] text-lupo-text">No hay sucursales listadas para esa provincia.</p>
+                      ) : (
+                        <p className="text-[12px] text-lupo-text">
+                          Elegí la provincia para ver las sucursales donde podés retirar.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {shippingZipcode.trim().length < 4 || shippingCity.trim().length < 2 ? (
                 <div className="rounded-lg border border-lupo-border bg-lupo-gray/40 px-4 py-3 text-[13px] text-lupo-text">

@@ -6,6 +6,7 @@ import {
   quoteCheckoutShipping,
   syncOrderPaymentFromMercadoPago,
 } from '../repos/ordersRepo.js';
+import { micorreoFetchAgencies, micorreoIsConfigured } from '../services/micorreo.js';
 
 export const orderRouter = Router();
 
@@ -97,6 +98,7 @@ orderRouter.post('/shipping/quote', async (req, res) => {
     const body = req.body as {
       items?: { productId?: string; quantity?: number }[];
       address?: { zipcode?: string; city?: string; province?: string; country?: string };
+      deliveredType?: string;
     };
     const items = Array.isArray(body.items)
       ? body.items
@@ -107,9 +109,12 @@ orderRouter.post('/shipping/quote', async (req, res) => {
           .filter((it) => it.productId && it.quantity > 0)
       : [];
     const address = body.address ?? {};
+    const dt = String(body.deliveredType ?? 'D').toUpperCase();
+    const deliveredType: 'D' | 'S' = dt === 'S' ? 'S' : 'D';
 
     const quote = await quoteCheckoutShipping({
       items,
+      deliveredType,
       address: {
         zipcode: String(address.zipcode ?? ''),
         city: address.city ? String(address.city) : null,
@@ -121,6 +126,32 @@ orderRouter.post('/shipping/quote', async (req, res) => {
     res.status(200).json({ ok: true, ...quote });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'No se pudo calcular el envío.';
+    res.status(400).json({ error: msg });
+  }
+});
+
+orderRouter.get('/shipping/agencies', async (req, res) => {
+  try {
+    if (!micorreoIsConfigured()) {
+      res.status(400).json({ error: 'MiCorreo no está configurado (faltan variables de entorno).' });
+      return;
+    }
+    const provinceCode = String(req.query.provinceCode ?? '').trim();
+    const rows = await micorreoFetchAgencies(provinceCode);
+    const agencies = rows.map((a) => {
+      const addr = a.location?.address;
+      const street = [addr?.streetName, addr?.streetNumber].filter(Boolean).join(' ');
+      return {
+        code: a.code,
+        name: a.name,
+        locality: addr?.locality ?? '',
+        postalCode: addr?.postalCode ?? '',
+        street,
+      };
+    });
+    res.status(200).json({ ok: true, agencies });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'No se pudieron cargar las sucursales.';
     res.status(400).json({ error: msg });
   }
 });
@@ -191,6 +222,10 @@ orderRouter.post('/checkout', async (req, res) => {
       shippingOptionId?: string;
       shippingProvider?: string;
       shippingZipcode?: string;
+      shippingAgencyCode?: string;
+      shippingAgencyName?: string;
+      shippingDeliveredType?: 'D' | 'S';
+      shippingProductType?: string;
     };
     const items = Array.isArray(body.items) ? body.items : [];
     const customerId = (req as Request & { customerId?: number }).customerId;
@@ -208,6 +243,10 @@ orderRouter.post('/checkout', async (req, res) => {
       shippingOptionId: body.shippingOptionId,
       shippingProvider: body.shippingProvider,
       shippingZipcode: body.shippingZipcode,
+      shippingAgencyCode: body.shippingAgencyCode,
+      shippingAgencyName: body.shippingAgencyName,
+      shippingDeliveredType: body.shippingDeliveredType,
+      shippingProductType: body.shippingProductType,
     });
 
     res.status(201).json({ ok: true, orderId: result.orderId, checkoutUrl: result.checkoutUrl });

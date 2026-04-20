@@ -287,21 +287,32 @@ export interface AdminOrder {
   }>;
 }
 
+export type CheckoutShippingEngine = 'micorreo' | 'local';
+
 export interface CheckoutShippingQuoteOption {
   id: string;
-  provider: 'tiendanube';
+  provider: 'tiendanube' | 'micorreo';
   carrier: 'correo_argentino';
   label: string;
   cost: number;
   minDays: number;
   maxDays: number;
+  deliveredType?: 'D' | 'S';
+  productType?: string | null;
 }
 
 export async function quoteCheckoutShipping(params: {
   items: { productId: string; quantity: number }[];
   address: { zipcode: string; city?: string; province?: string; country?: string };
+  deliveredType?: 'D' | 'S';
 }): Promise<
-  | { ok: true; currency: string; subtotal: number; options: CheckoutShippingQuoteOption[] }
+  | {
+      ok: true;
+      currency: string;
+      subtotal: number;
+      options: CheckoutShippingQuoteOption[];
+      shippingEngine: CheckoutShippingEngine;
+    }
   | { ok: false; error: string }
 > {
   const base = apiBase();
@@ -319,6 +330,7 @@ export async function quoteCheckoutShipping(params: {
           currency?: string;
           subtotal?: number;
           options?: CheckoutShippingQuoteOption[];
+          shippingEngine?: CheckoutShippingEngine;
           error?: string;
         }
       | undefined;
@@ -335,7 +347,43 @@ export async function quoteCheckoutShipping(params: {
       currency: String(data.currency ?? 'ARS'),
       subtotal: Number(data.subtotal ?? 0),
       options: data.options,
+      shippingEngine: data.shippingEngine === 'micorreo' ? 'micorreo' : 'local',
     };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
+export interface MicorreoAgencyOption {
+  code: string;
+  name: string;
+  locality: string;
+  postalCode: string;
+  street: string;
+}
+
+export async function fetchMicorreoAgencies(provinceCode: string): Promise<
+  { ok: true; agencies: MicorreoAgencyOption[] } | { ok: false; error: string }
+> {
+  const base = apiBase();
+  const q = encodeURIComponent(provinceCode.trim());
+  const url = base
+    ? `${base}/api/orders/shipping/agencies?provinceCode=${q}`
+    : `/api/orders/shipping/agencies?provinceCode=${q}`;
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    let data: { ok?: boolean; agencies?: MicorreoAgencyOption[]; error?: string } = {};
+    try {
+      data = JSON.parse(text) as typeof data;
+    } catch {
+      return { ok: false, error: apiErrorMessage(res, text) };
+    }
+    if (!res.ok || !data.ok || !Array.isArray(data.agencies)) {
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return { ok: true, agencies: data.agencies };
   } catch (e) {
     if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
     throw e;
@@ -354,6 +402,10 @@ export async function createCheckoutOrder(params: {
   shippingOptionId?: string;
   shippingProvider?: string;
   shippingZipcode?: string;
+  shippingAgencyCode?: string;
+  shippingAgencyName?: string;
+  shippingDeliveredType?: 'D' | 'S';
+  shippingProductType?: string;
 }): Promise<{ ok: true; orderId: number; checkoutUrl: string | null } | { ok: false; error: string }> {
   const base = apiBase();
   const url = base ? `${base}/api/orders/checkout` : '/api/orders/checkout';

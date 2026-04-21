@@ -1,9 +1,15 @@
 import { Router } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { requireAdmin } from '../middleware/auth.js';
-import { cancelOrderAndRestoreStock, listOrdersForAdmin } from '../repos/ordersRepo.js';
+import {
+  cancelOrderAndRestoreStock,
+  getOrderNotificationSnapshot,
+  listOrdersForAdmin,
+  updateOrderShipment,
+} from '../repos/ordersRepo.js';
 import { updateProductOrVariantPrice } from '../repos/productsRepo.js';
 import { getPool } from '../pool.js';
+import { sendOrderNotificationEmail } from '../services/notifications.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -44,9 +50,40 @@ adminRouter.post('/orders/:orderId/cancel', async (req, res) => {
       return;
     }
     await cancelOrderAndRestoreStock(orderId);
+    const order = await getOrderNotificationSnapshot(orderId);
+    if (order) {
+      await sendOrderNotificationEmail('order_cancelled', order);
+    }
     res.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'No se pudo cancelar el pedido.';
+    res.status(400).json({ error: msg });
+  }
+});
+
+adminRouter.patch('/orders/:orderId/shipment', async (req, res) => {
+  try {
+    const orderId = Number(req.params.orderId);
+    if (!Number.isFinite(orderId) || orderId <= 0) {
+      res.status(400).json({ error: 'Pedido inválido.' });
+      return;
+    }
+    const body = req.body as { trackingNumber?: unknown; provider?: unknown; status?: unknown };
+    const trackingNumber = String(body.trackingNumber ?? '').trim();
+    if (!trackingNumber) {
+      res.status(400).json({ error: 'trackingNumber es obligatorio.' });
+      return;
+    }
+    const provider = body.provider != null ? String(body.provider).trim() : undefined;
+    const status = body.status != null ? String(body.status).trim() : undefined;
+    await updateOrderShipment({ orderId, trackingNumber, provider, status });
+    const order = await getOrderNotificationSnapshot(orderId);
+    if (order) {
+      await sendOrderNotificationEmail('shipment_assigned', order);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'No se pudo asignar número de envío.';
     res.status(400).json({ error: msg });
   }
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useCart } from '../context/CartContext';
+import { useCustomerAuth } from '../context/CustomerAuthContext';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -158,6 +159,7 @@ function loadMercadoPagoSdk(): Promise<void> {
 
 export function Checkout() {
   const { items, cartTotal, clearCart } = useCart();
+  const { customer } = useCustomerAuth();
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -184,6 +186,21 @@ export function Checkout() {
   const [shippingError, setShippingError] = useState<string | null>(null);
   const [selectedShippingId, setSelectedShippingId] = useState<string | null>(null);
   const cardFormRef = useRef<MercadoPagoCardFormInstance | null>(null);
+  useEffect(() => {
+    if (!customer) return;
+    const emailInput = document.getElementById('email') as HTMLInputElement | null;
+    const firstNameInput = document.getElementById('firstName') as HTMLInputElement | null;
+    const lastNameInput = document.getElementById('lastName') as HTMLInputElement | null;
+    if (emailInput && customer.email && !emailInput.value.trim()) emailInput.value = customer.email;
+    if ((firstNameInput || lastNameInput) && customer.fullName) {
+      const parts = customer.fullName.trim().split(/\s+/);
+      const first = parts.shift() || '';
+      const rest = parts.join(' ');
+      if (firstNameInput && !firstNameInput.value.trim()) firstNameInput.value = first;
+      if (lastNameInput && !lastNameInput.value.trim()) lastNameInput.value = rest || '-';
+    }
+  }, [customer]);
+
   const mpPublicKey = import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY?.trim() || '';
 
   const selectedShipping =
@@ -679,11 +696,17 @@ export function Checkout() {
     'w-full h-12 rounded-md border border-lupo-border bg-white overflow-hidden [&_iframe]:block [&_iframe]:h-12 [&_iframe]:max-h-12 [&_iframe]:w-full';
 
   return (
-    <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] max-w-7xl mx-auto bg-[#fafafa]">
+    <div className="min-h-screen pt-[120px] pb-24 px-4 md:px-8 lg:px-12 max-w-7xl mx-auto bg-[#f4f7fc]">
       <h1 className="text-[40px] md:text-[56px] font-light tracking-[-1px] mb-3 text-lupo-black">Checkout</h1>
       <p className="text-[14px] text-lupo-text mb-10 max-w-xl">
         Completá tus datos y elegí cómo querés pagar. El resumen queda fijo al hacer scroll en pantallas grandes.
       </p>
+      {customer && (
+        <div className="mb-6 rounded-xl border border-[#d9e1f1] bg-white px-4 py-3 text-[13px] text-lupo-ink">
+          Sesión iniciada como <strong>{customer.fullName || customer.email || `Cliente #${customer.id}`}</strong>.
+          Tus datos se autocompletan para acelerar el checkout.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14">
         {/* Form */}

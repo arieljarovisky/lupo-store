@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Download, Ban } from 'lucide-react';
-import { adminCancelOrder, fetchAdminOrders, type AdminOrder } from '../../lib/api';
+import { adminCancelOrder, adminUpdateOrderShipment, fetchAdminOrders, type AdminOrder } from '../../lib/api';
 import { downloadOrdersCsv } from '../../lib/adminExport';
 
 function paymentMethodLabel(order: AdminOrder): string {
@@ -17,6 +17,8 @@ export function AdminOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [savingShipmentId, setSavingShipmentId] = useState<number | null>(null);
+  const [trackingInputs, setTrackingInputs] = useState<Record<number, string>>({});
   const [cancelError, setCancelError] = useState<string | null>(null);
 
   const reloadOrders = useCallback(() => {
@@ -30,6 +32,11 @@ export function AdminOrders() {
         return;
       }
       setOrders(r.orders);
+      setTrackingInputs(
+        Object.fromEntries(
+          r.orders.map((o) => [o.id, o.shippingTrackingNumber ?? ''])
+        )
+      );
       setError(null);
     });
   }, []);
@@ -46,6 +53,28 @@ export function AdminOrders() {
     setCancellingId(orderId);
     const r = await adminCancelOrder(orderId);
     setCancellingId(null);
+    if ('error' in r) {
+      setCancelError(r.error);
+      return;
+    }
+    reloadOrders();
+  };
+
+  const handleSaveTracking = async (order: AdminOrder) => {
+    const trackingNumber = String(trackingInputs[order.id] ?? '').trim();
+    if (!trackingNumber) {
+      setCancelError('Ingresá un número de envío válido.');
+      return;
+    }
+    setCancelError(null);
+    setSavingShipmentId(order.id);
+    const r = await adminUpdateOrderShipment({
+      orderId: order.id,
+      trackingNumber,
+      provider: order.shippingProvider || 'correo_argentino',
+      status: 'in_transit',
+    });
+    setSavingShipmentId(null);
     if ('error' in r) {
       setCancelError(r.error);
       return;
@@ -133,6 +162,30 @@ export function AdminOrders() {
                   <span className="text-[#888]">Contacto: </span>
                   {o.guestEmail || o.guestPhone || '—'}
                 </span>
+                <span>
+                  <span className="text-[#888]">Tracking: </span>
+                  <span className="font-medium">{o.shippingTrackingNumber || 'Sin asignar'}</span>
+                </span>
+              </div>
+              <div className="px-5 pb-4">
+                <div className="flex flex-col md:flex-row gap-2 md:items-center">
+                  <input
+                    value={trackingInputs[o.id] ?? ''}
+                    onChange={(e) =>
+                      setTrackingInputs((prev) => ({ ...prev, [o.id]: e.target.value }))
+                    }
+                    placeholder="Número de envío"
+                    className="border border-lupo-border px-3 py-2 text-[13px] outline-none focus:border-lupo-black w-full md:max-w-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSaveTracking(o)}
+                    disabled={savingShipmentId === o.id}
+                    className="border border-lupo-black bg-lupo-black text-white px-4 py-2 text-[11px] uppercase tracking-[1px] font-semibold disabled:opacity-60"
+                  >
+                    {savingShipmentId === o.id ? 'Guardando…' : 'Guardar envío'}
+                  </button>
+                </div>
               </div>
               <div className="px-5 pb-5 overflow-x-auto">
                 <table className="w-full text-[13px]">

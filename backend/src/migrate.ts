@@ -220,6 +220,24 @@ export async function runMigrations(p: Pool): Promise<void> {
     'payment_reference',
     '`payment_reference` VARCHAR(255) DEFAULT NULL AFTER `installment_interest_rate`'
   );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_tracking_number',
+    '`shipping_tracking_number` VARCHAR(120) DEFAULT NULL AFTER `payment_reference`'
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_provider',
+    "`shipping_provider` VARCHAR(40) DEFAULT NULL AFTER `shipping_tracking_number`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_status',
+    "`shipping_status` VARCHAR(40) DEFAULT NULL AFTER `shipping_provider`"
+  );
 
   await p.query(
     'CREATE INDEX idx_products_sku ON products (sku)'

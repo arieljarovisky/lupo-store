@@ -16,9 +16,9 @@ export function ProductCard({ product }: ProductCardProps) {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.5 }}
-      className="group flex flex-col"
+      className="group flex flex-col lupo-shell rounded-2xl p-3"
     >
-      <div className="relative aspect-[3/4] bg-[#F0F0F0] rounded-[2px] overflow-hidden mb-4 border border-[#EEE]">
+      <div className="relative aspect-[3/4] bg-[#edf2fc] rounded-xl overflow-hidden mb-4 border border-[#d9e1f1]">
         <Link to={detailPath} className="block w-full h-full">
           <img
             src={product.image || 'https://placehold.co/600x800/f0f0f0/666?text=Sin+imagen'}
@@ -34,7 +34,7 @@ export function ProductCard({ product }: ProductCardProps) {
               e.preventDefault();
               addToCart(product);
             }}
-            className="w-full bg-white text-lupo-black py-3 text-[11px] uppercase tracking-[1px] font-semibold shadow-sm border border-lupo-border hover:bg-gray-50 transition-colors"
+            className="w-full bg-white text-lupo-ink py-3 text-[11px] uppercase tracking-[1px] font-semibold shadow-sm border border-[#d9e1f1] hover:bg-[#f4f7fc] transition-colors rounded-lg"
           >
             Agregar al Carrito
           </button>
@@ -43,12 +43,12 @@ export function ProductCard({ product }: ProductCardProps) {
       
       <div className="flex justify-between items-start">
         <div>
-          <Link to={detailPath} className="hover:opacity-70 transition-opacity">
-            <h3 className="font-medium text-[13px] mb-1 text-lupo-black">{product.name}</h3>
+          <Link to={detailPath} className="hover:text-lupo-night">
+            <h3 className="font-medium text-[13px] mb-1 text-lupo-ink">{product.name}</h3>
           </Link>
-          <p className="text-[11px] text-[#777] uppercase tracking-[1px]">{product.category}</p>
+          <p className="text-[11px] text-lupo-slate uppercase tracking-[1px]">{product.category}</p>
         </div>
-        <span className="font-medium text-[13px] text-lupo-black">${product.price.toFixed(2)}</span>
+        <span className="font-medium text-[13px] text-lupo-night">${product.price.toFixed(2)}</span>
       </div>
     </motion.div>
   );

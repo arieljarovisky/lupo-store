@@ -120,6 +120,18 @@ export interface CheckoutShippingQuoteOption {
   productType?: string | null;
 }
 
+export interface OrderNotificationSnapshot {
+  id: number;
+  guestEmail: string | null;
+  status: string;
+  paymentStatus: string;
+  total: number;
+  currency: string;
+  shippingTrackingNumber: string | null;
+  shippingProvider: string | null;
+  shippingStatus: string | null;
+}
+
 function normalizeZipcode(raw: string): string {
   const t = raw.trim().toUpperCase();
   if (!t) return '';
@@ -695,12 +707,68 @@ export async function cancelOrderAndRestoreStock(orderId: number): Promise<void>
   }
 }
 
+export async function updateOrderShipment(params: {
+  orderId: number;
+  trackingNumber: string;
+  provider?: string | null;
+  status?: string | null;
+}): Promise<void> {
+  const p = await getPool();
+  const trackingNumber = String(params.trackingNumber ?? '').trim();
+  if (!trackingNumber) throw new Error('El número de envío es obligatorio.');
+  const provider = params.provider?.trim() || 'manual';
+  const status = params.status?.trim() || 'created';
+  const [upd] = await p.query<ResultSetHeader>(
+    `UPDATE orders
+     SET shipping_tracking_number = ?, shipping_provider = ?, shipping_status = ?
+     WHERE id = ?`,
+    [trackingNumber, provider, status, params.orderId]
+  );
+  if (upd.affectedRows === 0) {
+    throw new Error('Pedido no encontrado.');
+  }
+}
+
+export async function getOrderNotificationSnapshot(orderId: number): Promise<OrderNotificationSnapshot | null> {
+  const p = await getPool();
+  const [rows] = await p.query<RowDataPacket[]>(
+    `SELECT
+      id,
+      guest_email,
+      status,
+      payment_status,
+      total,
+      currency,
+      shipping_tracking_number,
+      shipping_provider,
+      shipping_status
+     FROM orders
+     WHERE id = ?
+     LIMIT 1`,
+    [orderId]
+  );
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  return {
+    id: Number(row.id),
+    guestEmail: row.guest_email != null ? String(row.guest_email) : null,
+    status: String(row.status ?? 'pending'),
+    paymentStatus: String(row.payment_status ?? 'unpaid'),
+    total: Number(row.total ?? 0),
+    currency: String(row.currency ?? 'ARS'),
+    shippingTrackingNumber: row.shipping_tracking_number != null ? String(row.shipping_tracking_number) : null,
+    shippingProvider: row.shipping_provider != null ? String(row.shipping_provider) : null,
+    shippingStatus: row.shipping_status != null ? String(row.shipping_status) : null,
+  };
+}
+
 export async function listOrdersForAdmin(limit = 100): Promise<Order[]> {
   const p = await getPool();
   const [orderRows] = await p.query<RowDataPacket[]>(
     `SELECT
       id, customer_id, guest_email, guest_phone, payment_method, installments, installment_interest_rate,
-      payment_reference, status, payment_status, subtotal, total, currency, created_at
+      payment_reference, status, payment_status, subtotal, total, currency, created_at,
+      shipping_tracking_number, shipping_provider, shipping_status
      FROM orders ORDER BY created_at DESC LIMIT ?`,
     [Math.min(limit, 500)]
   );
@@ -734,6 +802,9 @@ export async function listOrdersForAdmin(limit = 100): Promise<Order[]> {
       subtotal: Number(o.subtotal),
       total: Number(o.total),
       currency: String(o.currency ?? 'ARS'),
+      shippingTrackingNumber: o.shipping_tracking_number != null ? String(o.shipping_tracking_number) : null,
+      shippingProvider: o.shipping_provider != null ? String(o.shipping_provider) : null,
+      shippingStatus: o.shipping_status != null ? String(o.shipping_status) : null,
       createdAt: new Date(String(o.created_at)).toISOString(),
       items,
     });

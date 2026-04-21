@@ -65,6 +65,9 @@ export interface Order {
   subtotal: number;
   total: number;
   currency: string;
+  shippingTrackingNumber: string | null;
+  shippingProvider: string | null;
+  shippingStatus: string | null;
   createdAt: string;
   items: OrderItem[];
 }

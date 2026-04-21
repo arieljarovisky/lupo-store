@@ -43,6 +43,7 @@ function networkFetchErrorMessage(url: string, err: TypeError): string {
 }
 
 const ADMIN_TOKEN_KEY = 'lupo_admin_token';
+const CUSTOMER_TOKEN_KEY = 'lupo_customer_token';
 
 function canUseStorage(): boolean {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -62,6 +63,59 @@ export function setAdminToken(token: string): void {
 export function clearAdminToken(): void {
   if (!canUseStorage()) return;
   window.localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
+export interface CustomerSession {
+  id: number;
+  email: string | null;
+  phone: string | null;
+  fullName: string | null;
+  createdAt: string;
+}
+
+export function getCustomerToken(): string | null {
+  if (!canUseStorage()) return null;
+  const token = window.localStorage.getItem(CUSTOMER_TOKEN_KEY)?.trim();
+  return token || null;
+}
+
+export function setCustomerToken(token: string): void {
+  if (!canUseStorage()) return;
+  window.localStorage.setItem(CUSTOMER_TOKEN_KEY, token);
+}
+
+export function clearCustomerToken(): void {
+  if (!canUseStorage()) return;
+  window.localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+}
+
+export async function customerLoginWithGoogleIdToken(idToken: string): Promise<
+  { ok: true; token: string; customer: CustomerSession } | { ok: false; error: string }
+> {
+  const base = apiBase();
+  const url = base ? `${base}/api/auth/google` : '/api/auth/google';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+    const text = await res.text();
+    let data: { token?: string; customer?: CustomerSession; error?: string } = {};
+    try {
+      data = JSON.parse(text) as typeof data;
+    } catch {
+      return { ok: false, error: apiErrorMessage(res, text) };
+    }
+    if (!res.ok || !data.token || !data.customer) {
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    setCustomerToken(data.token);
+    return { ok: true, token: data.token, customer: data.customer };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
 }
 
 function apiErrorMessage(res: Response, bodyText: string): string {
@@ -157,6 +211,13 @@ export async function adminLogin(email: string, password: string): Promise<{
 
 function adminAuthHeaders(): Record<string, string> {
   const token = getAdminToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+function customerAuthHeaders(): Record<string, string> {
+  const token = getCustomerToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
@@ -277,6 +338,9 @@ export interface AdminOrder {
   total: number;
   currency: string;
   createdAt: string;
+  shippingTrackingNumber: string | null;
+  shippingProvider: string | null;
+  shippingStatus: string | null;
   items: Array<{
     id: number;
     productId: string;
@@ -320,7 +384,7 @@ export async function quoteCheckoutShipping(params: {
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: customerAuthHeaders(),
       body: JSON.stringify(params),
     });
     const text = await res.text();
@@ -494,6 +558,48 @@ export async function adminCancelOrder(
     : `/api/admin/orders/${orderId}/cancel`;
   try {
     const res = await fetch(url, { method: 'POST', headers: adminAuthHeaders() });
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      clearAdminToken();
+      return { ok: false, error: 'Sesión expirada.' };
+    }
+    if (!res.ok) {
+      let err = `HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(text) as { error?: string };
+        if (j.error) err = j.error;
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, error: err };
+    }
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
+export async function adminUpdateOrderShipment(params: {
+  orderId: number;
+  trackingNumber: string;
+  provider?: string;
+  status?: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const base = apiBase();
+  const url = base
+    ? `${base}/api/admin/orders/${params.orderId}/shipment`
+    : `/api/admin/orders/${params.orderId}/shipment`;
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: adminAuthHeaders(),
+      body: JSON.stringify({
+        trackingNumber: params.trackingNumber,
+        provider: params.provider,
+        status: params.status,
+      }),
+    });
     const text = await res.text();
     if (res.status === 401 || res.status === 403) {
       clearAdminToken();

@@ -29,7 +29,7 @@ export function Shop() {
 
   if (loading) {
     return (
-      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px]">
+      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-10">
         <p className="text-[16px] text-lupo-text">Cargando catálogo…</p>
       </div>
     );
@@ -42,7 +42,7 @@ export function Shop() {
       !error.includes('404/HTML') &&
       !error.includes('mismo origen');
     return (
-      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px] max-w-2xl">
+      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-10 max-w-2xl">
         <p className="text-[16px] text-red-600 mb-2">No se pudo cargar el catálogo.</p>
         <p className="text-[14px] text-lupo-text whitespace-pre-wrap">{error}</p>
         {isDevHint ? (
@@ -62,15 +62,14 @@ export function Shop() {
   }
 
   return (
-    <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-[60px]">
+    <div className="min-h-screen pt-[120px] pb-24 px-4 md:px-8 lg:px-12">
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
-        <div>
-          <h1 className="text-[40px] md:text-[56px] font-light tracking-[-1px] leading-[1.1] mb-4">Catálogo</h1>
+        <div className="lupo-shell rounded-2xl p-6 md:p-8">
+          <h1 className="text-[40px] md:text-[56px] font-light tracking-[-1px] leading-[1.1] mb-4 text-lupo-night">Catálogo</h1>
           <p className="text-[16px] text-lupo-text max-w-md leading-[1.6]">Explora nuestra colección completa de esenciales minimalistas.</p>
         </div>
         
-        {/* Category Filter */}
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 md:justify-end">
           {categories.map(category => {
             const isActive = 
               (category === 'Todos' && !categoryFilter) || 
@@ -80,10 +79,10 @@ export function Shop() {
               <button
                 key={category}
                 onClick={() => handleCategoryClick(category)}
-                className={`px-6 py-2.5 text-[11px] uppercase tracking-[1px] font-semibold transition-colors border ${
+                className={`px-6 py-2.5 rounded-full text-[11px] uppercase tracking-[1px] font-semibold transition-colors border ${
                   isActive 
-                    ? 'bg-lupo-black text-white border-lupo-black' 
-                    : 'bg-transparent text-lupo-black border-lupo-border hover:border-lupo-black'
+                    ? 'bg-lupo-night text-white border-lupo-night' 
+                    : 'bg-white text-lupo-ink border-[#d2dced] hover:border-lupo-ink'
                 }`}
               >
                 {category}

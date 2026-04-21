@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply font-sans text-lupo-black bg-lupo-gray antialiased selection:bg-lupo-black selection:text-white;
+    @apply font-sans text-lupo-black bg-[#F4F7FC] antialiased selection:bg-lupo-night selection:text-white;
   }
 
   h1,
@@ -15,9 +15,17 @@
   h6 {
     @apply font-display tracking-[-1px] font-light;
   }
+
+  a {
+    @apply transition-colors;
+  }
 }
 
 @layer components {
+  .lupo-shell {
+    @apply border border-[#D9E1F1] bg-white shadow-[0_20px_50px_-35px_rgba(14,21,37,0.35)];
+  }
+
   .product-description p {
     @apply mb-4;
   }

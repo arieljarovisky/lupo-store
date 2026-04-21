@@ -561,7 +561,7 @@ export function ProductDetail() {
   }
 
   return (
-    <div className="min-h-screen pt-[116px] pb-24 px-4 md:px-8 lg:px-12 bg-white">
+    <div className="min-h-screen pt-[116px] pb-24 px-4 md:px-8 lg:px-12 bg-[#f4f7fc]">
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(680px,1fr)_460px] gap-8 xl:gap-14 items-start max-w-[1680px] mx-auto">
         <div className="grid grid-cols-[84px_1fr] lg:grid-cols-[96px_1fr] gap-4 w-full">
           <div className="space-y-3">
@@ -581,7 +581,7 @@ export function ProductDetail() {
             })}
           </div>
 
-          <div className="bg-[#f5f5f5] border border-[#ececec] overflow-hidden w-full">
+          <div className="bg-[#edf2fc] border border-[#d9e1f1] overflow-hidden w-full rounded-2xl">
             <img
               src={selectedImage || galleryImages[0]}
               alt={product.name}
@@ -590,7 +590,7 @@ export function ProductDetail() {
           </div>
         </div>
 
-        <aside className="xl:sticky xl:top-[132px]">
+        <aside className="xl:sticky xl:top-[132px] lupo-shell rounded-2xl p-6">
           <p className="text-[12px] text-[#8a8a8a] mb-4">Shop / {product.category}</p>
           <h1 className="text-[34px] leading-[1.08] tracking-[-0.6px] font-medium text-lupo-black mb-4">
             {product.name}
@@ -722,10 +722,10 @@ export function ProductDetail() {
               });
             }}
             disabled={isOutOfStock}
-            className={`w-full py-[14px] uppercase text-[11px] tracking-[2px] font-semibold transition-colors mb-4 ${
+            className={`w-full py-[14px] rounded-xl uppercase text-[11px] tracking-[2px] font-semibold transition-colors mb-4 ${
               isOutOfStock
                 ? 'bg-[#c8c8c8] text-white cursor-not-allowed'
-                : 'bg-lupo-black text-white hover:bg-black/80'
+                : 'bg-lupo-night text-white hover:opacity-90'
             }`}
           >
             {isOutOfStock ? 'Sin stock' : 'Agregar al carrito'}

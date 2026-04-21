@@ -2,11 +2,13 @@ import { Router, type Request } from 'express';
 import { optionalCustomerAuth } from '../middleware/auth.js';
 import {
   createCheckoutOrder,
+  getOrderNotificationSnapshot,
   processMercadoPagoCardPayment,
   quoteCheckoutShipping,
   syncOrderPaymentFromMercadoPago,
 } from '../repos/ordersRepo.js';
 import { micorreoFetchAgencies, micorreoIsConfigured } from '../services/micorreo.js';
+import { sendOrderNotificationEmail } from '../services/notifications.js';
 
 export const orderRouter = Router();
 
@@ -82,6 +84,18 @@ orderRouter.post('/webhooks/mercado-pago', async (req, res) => {
       externalReference: payment.external_reference ?? null,
       preferenceId: payment.metadata?.preference_id ?? null,
     });
+    if (synced.updated && synced.orderId) {
+      const order = await getOrderNotificationSnapshot(synced.orderId);
+      if (order) {
+        const event =
+          synced.paymentStatus === 'paid'
+            ? 'payment_confirmed'
+            : synced.paymentStatus === 'failed'
+              ? 'order_cancelled'
+              : 'payment_pending';
+        await sendOrderNotificationEmail(event, order);
+      }
+    }
 
     res.status(200).json({ ok: true, ...synced });
   } catch (e) {
@@ -195,6 +209,16 @@ orderRouter.post('/:orderId/payments/mercado-pago/card', async (req, res) => {
       identificationType: body.identificationType?.trim() || null,
       identificationNumber: body.identificationNumber?.trim() || null,
     });
+    const order = await getOrderNotificationSnapshot(orderId);
+    if (order) {
+      const event =
+        result.paymentStatus === 'paid'
+          ? 'payment_confirmed'
+          : result.paymentStatus === 'failed'
+            ? 'order_cancelled'
+            : 'payment_pending';
+      await sendOrderNotificationEmail(event, order);
+    }
 
     res.status(200).json({
       ok: true,
@@ -248,6 +272,10 @@ orderRouter.post('/checkout', async (req, res) => {
       shippingDeliveredType: body.shippingDeliveredType,
       shippingProductType: body.shippingProductType,
     });
+    const order = await getOrderNotificationSnapshot(result.orderId);
+    if (order) {
+      await sendOrderNotificationEmail('order_created', order);
+    }
 
     res.status(201).json({ ok: true, orderId: result.orderId, checkoutUrl: result.checkoutUrl });
   } catch (e) {

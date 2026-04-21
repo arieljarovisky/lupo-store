@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { CartProvider } from './context/CartContext';
 import { ProductCatalogProvider } from './context/ProductCatalogContext';
+import { CustomerAuthProvider } from './context/CustomerAuthContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
@@ -36,13 +37,15 @@ function AppShell() {
 
 export default function App() {
   return (
-    <CartProvider>
-      <ProductCatalogProvider>
-        <Router>
-          <ScrollToTop />
-          <AppShell />
-        </Router>
-      </ProductCatalogProvider>
-    </CartProvider>
+    <CustomerAuthProvider>
+      <CartProvider>
+        <ProductCatalogProvider>
+          <Router>
+            <ScrollToTop />
+            <AppShell />
+          </Router>
+        </ProductCatalogProvider>
+      </CartProvider>
+    </CustomerAuthProvider>
   );
 }

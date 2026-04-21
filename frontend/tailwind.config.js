@@ -4,8 +4,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Helvetica Neue"', 'Arial', 'sans-serif'],
-        display: ['"Helvetica Neue"', 'Arial', 'sans-serif'],
+        sans: ['Montserrat', 'Arial', 'sans-serif'],
+        display: ['"More Sugar"', 'Montserrat', 'Arial', 'sans-serif'],
       },
       colors: {
         'lupo-black': '#1A1A1A',

@@ -16,11 +16,19 @@
   h4,
   h5,
   h6 {
-    @apply font-display tracking-[-1px] font-light;
+    @apply font-sans font-medium tracking-tight text-lupo-night;
   }
 
   a {
     @apply transition-colors;
+  }
+}
+
+@layer utilities {
+  /** Detalle decorativo: More Sugar + un poco más de aire entre letras */
+  .font-accent-sugar {
+    font-family: 'More Sugar', Montserrat, Arial, sans-serif;
+    letter-spacing: 0.06em;
   }
 }
 

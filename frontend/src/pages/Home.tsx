@@ -19,8 +19,8 @@ export function Home() {
             transition={{ duration: 0.8 }}
             className="lupo-shell rounded-3xl p-8 md:p-10"
           >
-            <div className="text-[11px] uppercase tracking-[2px] text-lupo-slate mb-5">
-              Nueva Temporada 2026
+            <div className="font-accent-sugar text-[13px] md:text-[14px] text-lupo-slate mb-5">
+              Nueva temporada 2026
             </div>
             <h1 className="text-[40px] md:text-[56px] font-light leading-[1.1] tracking-[-1px] mb-6 text-lupo-night">
               Diseño premium<br />que se siente.
@@ -51,7 +51,7 @@ export function Home() {
           transition={{ duration: 0.8, delay: 0.2 }}
           className="lupo-shell rounded-3xl flex items-center justify-center relative overflow-hidden min-h-[400px] md:min-h-full"
         >
-          <div className="absolute top-[24px] right-[24px] bg-lupo-night text-lupo-sky px-3 py-1.5 text-[10px] font-bold uppercase tracking-[1px] shadow-sm z-10 rounded-full">
+          <div className="absolute top-[24px] right-[24px] bg-lupo-night text-lupo-sky px-3 py-1.5 text-[11px] font-accent-sugar shadow-sm z-10 rounded-full">
             Colección destacada
           </div>
           <img 

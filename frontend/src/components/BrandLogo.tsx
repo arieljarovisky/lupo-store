@@ -7,29 +7,20 @@ interface BrandLogoProps {
 }
 
 export function BrandLogo({ compact = false, className = '', to = '/' }: BrandLogoProps) {
-  const content = (
-    <span className={`inline-flex items-center ${compact ? 'gap-2' : 'gap-3'} ${className}`}>
-      <img
-        src="/lupo-seeklogo.png"
-        alt="Lupo Store"
-        className={compact ? 'h-8 w-auto' : 'h-10 w-auto'}
-        loading="eager"
-      />
-      <span className="leading-none">
-        <strong className="block text-[14px] md:text-[15px] uppercase tracking-[0.18em] text-lupo-ink">
-          Lupo Store
-        </strong>
-        <span className="block text-[10px] uppercase tracking-[0.18em] text-lupo-slate">
-          Innerwear and sportwear
-        </span>
-      </span>
-    </span>
+  const img = (
+    <img
+      src="/lupo-seeklogo.png"
+      alt="Lupo"
+      className={`${compact ? 'h-9 md:h-10' : 'h-10 md:h-11'} w-auto max-w-[min(100%,220px)] object-contain object-left ${className}`}
+      loading="eager"
+      decoding="async"
+    />
   );
 
-  if (!to) return content;
+  if (!to) return img;
   return (
-    <Link to={to} aria-label="Ir al inicio">
-      {content}
+    <Link to={to} aria-label="Ir al inicio" className="inline-flex shrink-0">
+      {img}
     </Link>
   );
 }

@@ -37,8 +37,7 @@ export function Navbar() {
           {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
 
-        <BrandLogo compact className="hidden sm:inline-flex" />
-        <BrandLogo compact className="sm:hidden" />
+        <BrandLogo compact to="/" />
 
         <div className="hidden md:flex items-center space-x-6 text-[12px] font-semibold tracking-[0.08em] uppercase text-lupo-slate">
           <Link to="/shop" className="hover:text-lupo-ink transition-colors">Colección</Link>

@@ -63,7 +63,7 @@ export function AdminLayout() {
       <div className="min-h-screen bg-[#fafafa] flex items-center justify-center px-4 py-16">
         <div className="w-full max-w-md">
           <p className="text-[11px] uppercase tracking-[2px] text-[#888] mb-2">Lupo · administración</p>
-          <BrandLogo to="" />
+          <BrandLogo to="" className="max-h-10" />
           <h1 className="text-[32px] font-light tracking-[-0.5px] text-lupo-black mb-2">Panel administrador</h1>
           <p className="text-[14px] text-lupo-text mb-8">Ingresá para gestionar catálogo, pedidos y sincronización.</p>
 
@@ -116,7 +116,7 @@ export function AdminLayout() {
     <div className="min-h-screen bg-[#f5f5f5]">
       <aside className="hidden lg:flex flex-col fixed left-0 top-0 z-20 h-screen w-[260px] bg-lupo-black text-white">
         <div className="p-6 border-b border-white/10 shrink-0">
-          <BrandLogo to="" className="[&_*]:text-white [&_span:last-child]:!text-white/60" />
+          <BrandLogo to="" className="max-h-9 brightness-0 invert opacity-90" />
           <p className="text-[18px] font-medium tracking-wide mt-2">Administración</p>
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1">

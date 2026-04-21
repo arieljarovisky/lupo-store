@@ -27,7 +27,7 @@ export function Footer() {
 
       <div className="p-6 md:p-10 grid grid-cols-1 md:grid-cols-4 gap-12">
         <div className="md:col-span-2">
-          <BrandLogo to="/" className="[&_*]:text-white [&_span:last-child]:!text-[#9badcf]" />
+          <BrandLogo to="/" className="max-h-12 brightness-0 invert opacity-95" />
           <p className="text-[#aeb8ce] max-w-sm text-[13px] leading-[1.6] mt-5">
             Diseño funcional y calidad premium para el día a día. Hecho para moverte con comodidad.
           </p>

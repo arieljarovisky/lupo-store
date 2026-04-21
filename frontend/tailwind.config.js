@@ -5,7 +5,8 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Montserrat', 'Arial', 'sans-serif'],
-        display: ['"More Sugar"', 'Montserrat', 'Arial', 'sans-serif'],
+        /** Solo acentos puntuales (no títulos largos) */
+        moreSugar: ['"More Sugar"', 'Montserrat', 'Arial', 'sans-serif'],
       },
       colors: {
         'lupo-black': '#1A1A1A',

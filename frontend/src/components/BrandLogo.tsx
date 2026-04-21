@@ -10,7 +10,7 @@ export function BrandLogo({ compact = false, className = '', to = '/' }: BrandLo
   const content = (
     <span className={`inline-flex items-center ${compact ? 'gap-2' : 'gap-3'} ${className}`}>
       <img
-        src="/logo-lupo.svg"
+        src="/lupo-seeklogo.png"
         alt="Lupo Store"
         className={compact ? 'h-8 w-auto' : 'h-10 w-auto'}
         loading="eager"

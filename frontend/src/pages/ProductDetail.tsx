@@ -561,7 +561,7 @@ export function ProductDetail() {
   }
 
   return (
-    <div className="min-h-screen pt-[116px] pb-24 px-4 md:px-8 lg:px-12 bg-[#f4f7fc]">
+    <div className="min-h-screen bg-[#fafaf8] pt-[116px] pb-24 px-4 md:px-8 lg:px-12">
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(680px,1fr)_460px] gap-8 xl:gap-14 items-start max-w-[1680px] mx-auto">
         <div className="grid grid-cols-[84px_1fr] lg:grid-cols-[96px_1fr] gap-4 w-full">
           <div className="space-y-3">
@@ -581,7 +581,7 @@ export function ProductDetail() {
             })}
           </div>
 
-          <div className="bg-[#edf2fc] border border-[#d9e1f1] overflow-hidden w-full rounded-2xl">
+          <div className="overflow-hidden w-full bg-neutral-100 ring-1 ring-inset ring-black/[0.05]">
             <img
               src={selectedImage || galleryImages[0]}
               alt={product.name}
@@ -590,7 +590,7 @@ export function ProductDetail() {
           </div>
         </div>
 
-        <aside className="xl:sticky xl:top-[132px] lupo-shell rounded-2xl p-6">
+        <aside className="xl:sticky xl:top-[100px] border border-black/[0.06] bg-white p-6 md:p-8">
           <p className="text-[12px] text-[#8a8a8a] mb-4">Shop / {product.category}</p>
           <h1 className="text-[34px] leading-[1.08] tracking-[-0.6px] font-medium text-lupo-black mb-4">
             {product.name}

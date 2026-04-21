@@ -696,7 +696,7 @@ export function Checkout() {
     'w-full h-12 rounded-md border border-lupo-border bg-white overflow-hidden [&_iframe]:block [&_iframe]:h-12 [&_iframe]:max-h-12 [&_iframe]:w-full';
 
   return (
-    <div className="min-h-screen pt-[120px] pb-24 px-4 md:px-8 lg:px-12 max-w-7xl mx-auto bg-[#f4f7fc]">
+    <div className="min-h-screen bg-[#fafaf8] pt-[120px] pb-24 px-4 md:px-8 lg:px-12 max-w-7xl mx-auto">
       <h1 className="text-[40px] md:text-[56px] font-light tracking-[-1px] mb-3 text-lupo-black">Checkout</h1>
       <p className="text-[14px] text-lupo-text mb-10 max-w-xl">
         Completá tus datos y elegí cómo querés pagar. El resumen queda fijo al hacer scroll en pantallas grandes.

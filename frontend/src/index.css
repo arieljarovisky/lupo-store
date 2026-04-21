@@ -7,7 +7,8 @@
 
 @layer base {
   body {
-    @apply font-sans text-lupo-black bg-[#F4F7FC] antialiased selection:bg-lupo-night selection:text-white;
+    @apply font-sans text-[#1a1a1a] antialiased selection:bg-neutral-900 selection:text-white;
+    background-color: #fafaf8;
   }
 
   h1,
@@ -16,25 +17,37 @@
   h4,
   h5,
   h6 {
-    @apply font-sans font-medium tracking-tight text-lupo-night;
+    @apply font-sans font-normal tracking-tight text-neutral-900;
   }
 
   a {
-    @apply transition-colors;
+    @apply transition-colors duration-200;
   }
 }
 
 @layer utilities {
-  /** Detalle decorativo: More Sugar + un poco más de aire entre letras */
   .font-accent-sugar {
     font-family: 'More Sugar', Montserrat, Arial, sans-serif;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
+  }
+
+  /** Línea editorial fina (ritmo visual sin “cards”) */
+  .hairline-top {
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  .hairline-bottom {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   }
 }
 
 @layer components {
+  /**
+   * Superficie sutil: sin sombra dramática (evita look “template”).
+   * Usar solo cuando haga falta delimitar bloques.
+   */
   .lupo-shell {
-    @apply border border-[#D9E1F1] bg-white shadow-[0_20px_50px_-35px_rgba(14,21,37,0.35)];
+    @apply border border-black/[0.06] bg-white;
   }
 
   .product-description p {
@@ -47,15 +60,15 @@
   }
 
   .product-description table {
-    @apply w-full border border-lupo-border border-collapse my-5 text-[13px];
+    @apply w-full border border-neutral-200 border-collapse my-5 text-[13px];
   }
 
   .product-description th,
   .product-description td {
-    @apply border border-lupo-border px-3 py-2 text-left align-top;
+    @apply border border-neutral-200 px-3 py-2 text-left align-top;
   }
 
   .product-description th {
-    @apply bg-[#F7F7F7] font-semibold text-lupo-black;
+    @apply bg-neutral-50 font-medium text-neutral-900;
   }
 }

@@ -6,6 +6,9 @@ import { useCustomerAuth } from '../context/CustomerAuthContext';
 import { cn } from '../lib/utils';
 import { BrandLogo } from './BrandLogo';
 
+const navLink =
+  'text-[13px] font-medium text-neutral-600 hover:text-neutral-900 transition-colors';
+
 export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showAuthCard, setShowAuthCard] = useState(false);
@@ -23,107 +26,153 @@ export function Navbar() {
     mountGoogleButton(googleBtnRef.current);
   }, [customer, mountGoogleButton, showAuthCard]);
 
-  const navClasses = cn(
-    'fixed top-0 left-0 right-0 z-40 transition-all duration-300 ease-in-out px-4 md:px-8 lg:px-12 h-[84px] flex items-center bg-white/95 backdrop-blur border-b border-[#dfe5f2] text-lupo-black'
-  );
-
   return (
-    <nav className={navClasses}>
-      <div className="w-full flex items-center justify-between">
-        <button
-          className="md:hidden p-2 -ml-2 text-lupo-ink"
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        >
-          {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+    <nav
+      className={cn(
+        'fixed top-0 left-0 right-0 z-40',
+        'h-[72px] md:h-[76px]',
+        'border-b border-black/[0.06] bg-[#fafaf8]/95 backdrop-blur-[8px]'
+      )}
+    >
+      <div className="mx-auto flex h-full max-w-[1600px] items-center px-4 md:px-8 lg:px-10">
+        <div className="flex w-full items-center gap-4">
+          {/* Izquierda: menú móvil + logo */}
+          <div className="flex min-w-0 shrink-0 items-center gap-3 md:gap-5">
+            <button
+              type="button"
+              className="p-2 -ml-2 text-neutral-800 md:hidden"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label={isMobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+            >
+              {isMobileMenuOpen ? <X size={22} strokeWidth={1.5} /> : <Menu size={22} strokeWidth={1.5} />}
+            </button>
+            <BrandLogo compact to="/" />
+          </div>
 
-        <BrandLogo compact to="/" />
+          {/* Centro: navegación (desktop) */}
+          <div className="hidden min-w-0 flex-1 justify-center md:flex">
+            <div className="flex items-center gap-8 lg:gap-10">
+              <Link to="/shop" className={navLink}>
+                Colección
+              </Link>
+              <Link to="/shop?category=hombre" className={navLink}>
+                Hombre
+              </Link>
+              <Link to="/shop?category=damas" className={navLink}>
+                Damas
+              </Link>
+              <Link to="/shop?category=deportivo" className={navLink}>
+                Deportivo
+              </Link>
+            </div>
+          </div>
 
-        <div className="hidden md:flex items-center space-x-6 text-[12px] font-semibold tracking-[0.08em] uppercase text-lupo-slate">
-          <Link to="/shop" className="hover:text-lupo-ink transition-colors">Colección</Link>
-          <Link to="/shop?category=hombre" className="hover:text-lupo-ink transition-colors">Hombre</Link>
-          <Link to="/shop?category=damas" className="hover:text-lupo-ink transition-colors">Damas</Link>
-          <Link to="/shop?category=deportivo" className="hover:text-lupo-ink transition-colors">Deportivo</Link>
-        </div>
-
-        <div className="flex items-center gap-3 md:gap-5">
-          <button
-            type="button"
-            onClick={() => setShowAuthCard((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-full border border-[#d8e0f0] bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-lupo-ink hover:border-lupo-ink"
-          >
-            <UserRound size={14} />
-            {customer?.fullName || customer?.email ? 'Mi cuenta' : 'Ingresar'}
-          </button>
-          <Link
-            to="/admin"
-            className="text-[12px] font-semibold tracking-[0.08em] uppercase text-lupo-slate hover:text-lupo-ink transition-colors"
-          >
-            Admin
-          </Link>
-
-          <button
-            className="relative text-[12px] font-semibold tracking-[0.08em] uppercase text-lupo-ink hover:opacity-80 transition-opacity flex items-center"
-            onClick={() => setIsCartOpen(true)}
-          >
-            <span className="hidden md:inline mr-2">Carrito ({cartCount})</span>
-            <ShoppingBag size={20} strokeWidth={1.5} className="md:hidden" />
-            {cartCount > 0 && (
-              <span className="md:hidden absolute -top-1 -right-1 bg-lupo-night text-white text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">
-                {cartCount}
+          {/* Derecha: cuenta + admin + carrito */}
+          <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAuthCard((v) => !v)}
+              className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-[12px] font-medium text-neutral-700 hover:bg-black/[0.03] md:px-3"
+            >
+              <UserRound size={16} strokeWidth={1.5} className="text-neutral-500" />
+              <span className="hidden sm:inline">
+                {customer?.fullName || customer?.email ? 'Cuenta' : 'Ingresar'}
               </span>
-            )}
-          </button>
+            </button>
+            <Link
+              to="/admin"
+              className="hidden px-2 py-2 text-[12px] font-medium text-neutral-400 hover:text-neutral-700 sm:inline"
+            >
+              Admin
+            </Link>
+            <button
+              type="button"
+              className="relative inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-[12px] font-medium text-neutral-800 hover:bg-black/[0.03] md:px-3"
+              onClick={() => setIsCartOpen(true)}
+            >
+              <ShoppingBag size={19} strokeWidth={1.5} />
+              <span className="hidden md:inline">Carrito</span>
+              {cartCount > 0 && (
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-neutral-900 px-1 text-[10px] font-semibold text-white">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
       {showAuthCard && (
-        <div className="absolute top-full right-4 md:right-8 mt-2 w-[290px] rounded-2xl border border-[#dbe3f3] bg-white p-4 shadow-xl">
+        <div className="absolute right-4 top-full z-50 mt-1 w-[min(100vw-2rem,300px)] border border-black/[0.08] bg-white p-5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.18)] md:right-8">
           {customer ? (
-            <div className="space-y-3">
-              <p className="text-[11px] uppercase tracking-[0.08em] text-lupo-slate">Sesión activa</p>
-              <p className="text-[14px] text-lupo-ink font-medium">
+            <div className="space-y-4">
+              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-neutral-400">Sesión</p>
+              <p className="text-[15px] font-medium leading-snug text-neutral-900">
                 {customer.fullName || customer.email || `Cliente #${customer.id}`}
               </p>
-              {customer.email && <p className="text-[12px] text-lupo-slate">{customer.email}</p>}
+              {customer.email && <p className="text-[13px] text-neutral-500">{customer.email}</p>}
               <button
                 type="button"
                 onClick={logout}
-                className="inline-flex items-center gap-2 text-[12px] font-semibold text-lupo-ink hover:text-lupo-night"
+                className="inline-flex items-center gap-2 text-[13px] font-medium text-neutral-700 hover:text-neutral-900"
               >
-                <LogOut size={14} />
+                <LogOut size={15} strokeWidth={1.5} />
                 Cerrar sesión
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
-              <p className="text-[11px] uppercase tracking-[0.08em] text-lupo-slate">Clientes</p>
-              <p className="text-[13px] text-lupo-text">
-                Ingresá con Google para autocompletar tus datos y seguir tus pedidos.
+            <div className="space-y-4">
+              <p className="text-[13px] leading-relaxed text-neutral-600">
+                Iniciá sesión con Google para completar más rápido el checkout.
               </p>
               <div ref={googleBtnRef} />
-              {loading && <p className="text-[12px] text-lupo-text">Validando cuenta…</p>}
-              {authError && <p className="text-[12px] text-red-600">{authError}</p>}
+              {loading && <p className="text-[13px] text-neutral-500">Validando…</p>}
+              {authError && <p className="text-[13px] text-red-600">{authError}</p>}
             </div>
           )}
         </div>
       )}
 
       {isMobileMenuOpen && (
-        <div className="absolute top-full left-0 right-0 bg-white border-t border-[#dfe5f2] shadow-lg md:hidden">
-          <div className="flex flex-col p-6 space-y-5 text-[12px] font-semibold tracking-[0.08em] uppercase text-lupo-ink">
-            <Link to="/shop">Colección</Link>
-            <Link to="/shop?category=hombre">Hombre</Link>
-            <Link to="/shop?category=damas">Damas</Link>
-            <Link to="/shop?category=deportivo">Deportivo</Link>
+        <div className="hairline-top absolute left-0 right-0 top-full bg-[#fafaf8] md:hidden">
+          <div className="mx-auto flex max-w-[1600px] flex-col gap-1 px-4 py-4">
+            <Link to="/shop" className="py-3 text-[15px] font-medium text-neutral-900" onClick={() => setIsMobileMenuOpen(false)}>
+              Colección
+            </Link>
+            <Link
+              to="/shop?category=hombre"
+              className="py-3 text-[15px] font-medium text-neutral-900"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Hombre
+            </Link>
+            <Link
+              to="/shop?category=damas"
+              className="py-3 text-[15px] font-medium text-neutral-900"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Damas
+            </Link>
+            <Link
+              to="/shop?category=deportivo"
+              className="py-3 text-[15px] font-medium text-neutral-900"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Deportivo
+            </Link>
             <button
               type="button"
-              onClick={() => setShowAuthCard((v) => !v)}
-              className="text-left"
+              onClick={() => {
+                setShowAuthCard((v) => !v);
+                setIsMobileMenuOpen(false);
+              }}
+              className="py-3 text-left text-[15px] font-medium text-neutral-900"
             >
               {customer ? 'Mi cuenta' : 'Ingresar con Google'}
             </button>
-            <Link to="/admin">Admin</Link>
+            <Link to="/admin" className="py-3 text-[14px] text-neutral-500" onClick={() => setIsMobileMenuOpen(false)}>
+              Admin
+            </Link>
           </div>
         </div>
       )}

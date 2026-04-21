@@ -25,11 +25,11 @@ export function CartDrawer() {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 h-full w-full max-w-md bg-white z-50 shadow-2xl flex flex-col border-l border-[#d9e1f1]"
+            className="fixed top-0 right-0 h-full w-full max-w-md bg-[#fafaf8] z-50 flex flex-col border-l border-black/[0.08] shadow-[0_0_0_1px_rgba(0,0,0,0.04)]"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-[#d9e1f1] bg-[#f5f8ff]">
-              <h2 className="text-[18px] font-medium text-lupo-ink">Tu Carrito</h2>
+            <div className="flex items-center justify-between border-b border-black/[0.06] bg-white px-6 py-5">
+              <h2 className="text-[15px] font-medium tracking-tight text-neutral-900">Carrito</h2>
               <button 
                 onClick={() => setIsCartOpen(false)}
                 className="p-2 hover:bg-gray-50 transition-colors text-lupo-black"

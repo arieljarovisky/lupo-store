@@ -13,7 +13,7 @@ export function Shop() {
     const unique = [...new Set(products.map((p) => p.category))].sort();
     return ['Todos', ...unique];
   }, [products]);
-  
+
   const filteredProducts: Product[] =
     categoryFilter && categoryFilter !== 'todos'
       ? products.filter((p) => p.category.toLowerCase() === categoryFilter.toLowerCase())
@@ -29,8 +29,8 @@ export function Shop() {
 
   if (loading) {
     return (
-      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-10">
-        <p className="text-[16px] text-lupo-text">Cargando catálogo…</p>
+      <div className="min-h-screen bg-[#fafaf8] pt-[120px] pb-24 px-6 md:px-10">
+        <p className="text-[15px] text-neutral-500">Cargando catálogo…</p>
       </div>
     );
   }
@@ -42,18 +42,18 @@ export function Shop() {
       !error.includes('404/HTML') &&
       !error.includes('mismo origen');
     return (
-      <div className="min-h-screen pt-[120px] pb-24 px-6 md:px-10 max-w-2xl">
+      <div className="min-h-screen bg-[#fafaf8] pt-[120px] pb-24 px-6 md:px-10 max-w-2xl">
         <p className="text-[16px] text-red-600 mb-2">No se pudo cargar el catálogo.</p>
-        <p className="text-[14px] text-lupo-text whitespace-pre-wrap">{error}</p>
+        <p className="text-[14px] text-neutral-600 whitespace-pre-wrap">{error}</p>
         {isDevHint ? (
-          <p className="text-[13px] text-lupo-text mt-4">
-            En local: <code className="text-xs bg-gray-100 px-1">npm run dev</code> en la raíz del proyecto.
+          <p className="text-[13px] text-neutral-600 mt-4">
+            En local: <code className="text-xs bg-neutral-100 px-1">npm run dev</code> en la raíz del proyecto.
           </p>
         ) : (
-          <p className="text-[13px] text-lupo-text mt-4 leading-relaxed">
+          <p className="text-[13px] text-neutral-600 mt-4 leading-relaxed">
             En producción: el front tiene que apuntar al backend. Definí{' '}
-            <code className="text-xs bg-gray-100 px-1">VITE_API_URL</code> con la URL del API al hacer build, o
-            desplegá API + sitio en el mismo servicio (Express sirve <code className="text-xs bg-gray-100 px-1">/api</code>{' '}
+            <code className="text-xs bg-neutral-100 px-1">VITE_API_URL</code> con la URL del API al hacer build, o
+            desplegá API + sitio en el mismo servicio (Express sirve <code className="text-xs bg-neutral-100 px-1">/api</code>{' '}
             y los archivos estáticos).
           </p>
         )}
@@ -62,55 +62,62 @@ export function Shop() {
   }
 
   return (
-    <div className="min-h-screen pt-[120px] pb-24 px-4 md:px-8 lg:px-12">
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
-        <div className="lupo-shell rounded-2xl p-6 md:p-8">
-          <h1 className="text-[40px] md:text-[56px] font-light tracking-[-1px] leading-[1.1] mb-4 text-lupo-night">Catálogo</h1>
-          <p className="text-[16px] text-lupo-text max-w-md leading-[1.6]">Explora nuestra colección completa de esenciales minimalistas.</p>
-        </div>
-        
-        <div className="flex flex-wrap gap-3 md:justify-end">
-          {categories.map(category => {
-            const isActive = 
-              (category === 'Todos' && !categoryFilter) || 
-              (categoryFilter && category.toLowerCase() === categoryFilter.toLowerCase());
-              
-            return (
-              <button
-                key={category}
-                onClick={() => handleCategoryClick(category)}
-                className={`px-6 py-2.5 rounded-full text-[11px] uppercase tracking-[1px] font-semibold transition-colors border ${
-                  isActive 
-                    ? 'bg-lupo-night text-white border-lupo-night' 
-                    : 'bg-white text-lupo-ink border-[#d2dced] hover:border-lupo-ink'
-                }`}
-              >
-                {category}
-              </button>
-            );
-          })}
-        </div>
+    <div className="min-h-screen bg-[#fafaf8] pt-[120px] pb-28 px-6 md:px-10 lg:px-12">
+      <div className="mx-auto max-w-[1600px]">
+        <header className="hairline-bottom pb-10 md:flex md:items-end md:justify-between md:gap-12">
+          <div className="max-w-xl">
+            <h1 className="text-[clamp(1.75rem,3.5vw,2.75rem)] font-light tracking-[-0.03em] text-neutral-900">
+              Catálogo
+            </h1>
+            <p className="mt-4 text-[15px] leading-relaxed text-neutral-600">
+              Filtrá por categoría. Misma calidad, distintos usos.
+            </p>
+          </div>
+
+          <nav className="mt-10 flex flex-wrap gap-x-1 gap-y-2 md:mt-0 md:justify-end" aria-label="Filtros de categoría">
+            {categories.map((category) => {
+              const isActive =
+                (category === 'Todos' && !categoryFilter) ||
+                (categoryFilter && category.toLowerCase() === categoryFilter.toLowerCase());
+
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => handleCategoryClick(category)}
+                  className={`relative px-3 py-2 text-[12px] font-medium transition-colors md:px-4 ${
+                    isActive ? 'text-neutral-900' : 'text-neutral-400 hover:text-neutral-700'
+                  }`}
+                >
+                  {category}
+                  {isActive && (
+                    <span className="absolute bottom-1 left-3 right-3 h-px bg-neutral-900 md:left-4 md:right-4" />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </header>
+
+        {filteredProducts.length > 0 ? (
+          <div className="mt-14 grid grid-cols-1 gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filteredProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : (
+          <div className="py-24 text-center">
+            <p className="text-[15px] text-neutral-600">No hay productos en esta categoría.</p>
+            <button
+              type="button"
+              onClick={() => handleCategoryClick('Todos')}
+              className="mt-8 text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-900 underline underline-offset-4"
+            >
+              Ver todo el catálogo
+            </button>
+          </div>
+        )}
       </div>
-      
-      {filteredProducts.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10">
-          {filteredProducts.map((product) => (
-            <div key={product.id}>
-              <ProductCard product={product} />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="py-24 text-center">
-          <p className="text-[16px] text-lupo-text">No se encontraron productos en esta categoría.</p>
-          <button 
-            onClick={() => handleCategoryClick('Todos')}
-            className="mt-6 text-[12px] uppercase tracking-[1.5px] font-semibold text-lupo-black border-b border-lupo-black pb-1"
-          >
-            Limpiar Filtros
-          </button>
-        </div>
-      )}
     </div>
   );
 }

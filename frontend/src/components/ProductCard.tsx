@@ -11,45 +11,46 @@ export function ProductCard({ product }: ProductCardProps) {
   const detailPath = `/producto/${encodeURIComponent(product.id)}`;
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
+    <motion.article
+      initial={{ opacity: 0, y: 10 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.5 }}
-      className="group flex flex-col lupo-shell rounded-2xl p-3"
+      viewport={{ once: true, margin: '-40px' }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className="group flex flex-col"
     >
-      <div className="relative aspect-[3/4] bg-[#edf2fc] rounded-xl overflow-hidden mb-4 border border-[#d9e1f1]">
-        <Link to={detailPath} className="block w-full h-full">
+      <div className="relative aspect-[3/4] overflow-hidden bg-neutral-100">
+        <Link to={detailPath} className="block h-full w-full">
           <img
-            src={product.image || 'https://placehold.co/600x800/f0f0f0/666?text=Sin+imagen'}
+            src={product.image || 'https://placehold.co/600x800/f5f5f5/a3a3a3?text=Sin+imagen'}
             alt={product.name}
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+            className="h-full w-full object-cover transition-[transform,opacity] duration-[650ms] ease-out group-hover:scale-[1.03]"
           />
         </Link>
-        
-        {/* Quick Add Button overlay */}
-        <div className="absolute inset-x-0 bottom-0 p-4 opacity-0 transform translate-y-4 transition-all duration-300 group-hover:opacity-100 group-hover:translate-y-0">
-          <button 
+        <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/[0.04] transition-opacity duration-300 group-hover:opacity-100" />
+
+        <div className="absolute inset-x-0 bottom-0 translate-y-full p-3 transition-transform duration-300 ease-out group-hover:translate-y-0">
+          <button
+            type="button"
             onClick={(e) => {
               e.preventDefault();
               addToCart(product);
             }}
-            className="w-full bg-white text-lupo-ink py-3 text-[11px] uppercase tracking-[1px] font-semibold shadow-sm border border-[#d9e1f1] hover:bg-[#f4f7fc] transition-colors rounded-lg"
+            className="pointer-events-auto w-full bg-white/95 py-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-900 backdrop-blur-sm transition-colors hover:bg-white"
           >
-            Agregar al Carrito
+            Agregar al carrito
           </button>
         </div>
       </div>
-      
-      <div className="flex justify-between items-start">
-        <div>
-          <Link to={detailPath} className="hover:text-lupo-night">
-            <h3 className="font-medium text-[13px] mb-1 text-lupo-ink">{product.name}</h3>
+
+      <div className="mt-4 flex items-start justify-between gap-4 border-t border-black/[0.06] pt-4">
+        <div className="min-w-0">
+          <Link to={detailPath} className="block">
+            <h3 className="text-[14px] font-medium leading-snug text-neutral-900 line-clamp-2">{product.name}</h3>
           </Link>
-          <p className="text-[11px] text-lupo-slate uppercase tracking-[1px]">{product.category}</p>
+          <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-400">{product.category}</p>
         </div>
-        <span className="font-medium text-[13px] text-lupo-night">${product.price.toFixed(2)}</span>
+        <p className="shrink-0 tabular-nums text-[14px] font-medium text-neutral-900">${product.price.toFixed(2)}</p>
       </div>
-    </motion.div>
+    </motion.article>
   );
 }

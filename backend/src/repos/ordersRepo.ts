@@ -303,50 +303,54 @@ export async function quoteCheckoutShipping(params: {
   const freeOver = Math.max(0, Math.round(Number(process.env.SHIPPING_FREE_OVER_ARS ?? '0') || 0));
 
   if (enviosIsConfigured()) {
-    const origin = normalizeZipcode(process.env.ENVIOS_POSTAL_CODE_ORIGIN ?? '');
-    if (origin.length < 4) {
-      throw new Error('ENVIOS_POSTAL_CODE_ORIGIN inválido o demasiado corto.');
-    }
-    const dimensions = enviosDefaultDimensions();
-    const rows = await enviosFetchRates({
-      postalCodeOrigin: origin,
-      postalCodeDestination: zipcode,
-      dimensions,
-    });
-    const options: CheckoutShippingQuoteOption[] = rows.map((r) => ({
-      id: `envios:${r.id}`,
-      provider: 'envios',
-      carrier: 'correo_argentino',
-      label: `${r.label} (envios.com)`,
-      cost: r.cost,
-      minDays: r.minDays,
-      maxDays: r.maxDays,
-      deliveredType: 'D',
-      productType: null,
-    }));
-    if (freeOver > 0 && subtotal >= freeOver && options.length > 0) {
-      const cheapest = options.reduce((a, b) => (a.cost <= b.cost ? a : b));
-      options.unshift({
-        id: 'envios_free',
+    try {
+      const origin = normalizeZipcode(process.env.ENVIOS_POSTAL_CODE_ORIGIN ?? '');
+      if (origin.length < 4) {
+        throw new Error('ENVIOS_POSTAL_CODE_ORIGIN inválido o demasiado corto.');
+      }
+      const dimensions = enviosDefaultDimensions();
+      const rows = await enviosFetchRates({
+        postalCodeOrigin: origin,
+        postalCodeDestination: zipcode,
+        dimensions,
+      });
+      const options: CheckoutShippingQuoteOption[] = rows.map((r) => ({
+        id: `envios:${r.id}`,
         provider: 'envios',
         carrier: 'correo_argentino',
-        label: 'Promoción envío gratis (envios.com)',
-        cost: 0,
-        minDays: cheapest.minDays,
-        maxDays: cheapest.maxDays,
+        label: `${r.label} (envios.com)`,
+        cost: r.cost,
+        minDays: r.minDays,
+        maxDays: r.maxDays,
         deliveredType: 'D',
         productType: null,
-      });
+      }));
+      if (freeOver > 0 && subtotal >= freeOver && options.length > 0) {
+        const cheapest = options.reduce((a, b) => (a.cost <= b.cost ? a : b));
+        options.unshift({
+          id: 'envios_free',
+          provider: 'envios',
+          carrier: 'correo_argentino',
+          label: 'Promoción envío gratis (envios.com)',
+          cost: 0,
+          minDays: cheapest.minDays,
+          maxDays: cheapest.maxDays,
+          deliveredType: 'D',
+          productType: null,
+        });
+      }
+      if (options.length > 0) {
+        return {
+          currency: 'ARS',
+          subtotal,
+          options,
+          shippingEngine: 'envios',
+        };
+      }
+      console.warn('[shipping] envios.com sin tarifas, usando fallback local/micorreo');
+    } catch (err) {
+      console.warn('[shipping] envios.com error, usando fallback local/micorreo:', err);
     }
-    if (options.length === 0) {
-      throw new Error('Envios.com no devolvió tarifas para ese código postal.');
-    }
-    return {
-      currency: 'ARS',
-      subtotal,
-      options,
-      shippingEngine: 'envios',
-    };
   }
 
   if (micorreoIsConfigured()) {

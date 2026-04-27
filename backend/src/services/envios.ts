@@ -11,6 +11,11 @@ type EnviosRawRate = {
   min_days?: number | string;
   max_days?: number | string;
   estimated_days?: number | string;
+  total_price?: number | string;
+  totalPrice?: number | string;
+  delivery_days?: number | string;
+  deliveryDays?: number | string;
+  days?: number | string;
 };
 
 export type EnviosRate = {
@@ -68,10 +73,22 @@ export function enviosDefaultDimensions(): { weight: number; height: number; wid
 function normalizeRates(payload: unknown): EnviosRawRate[] {
   if (Array.isArray(payload)) return payload as EnviosRawRate[];
   if (payload && typeof payload === 'object') {
-    const maybe = payload as { data?: unknown; rates?: unknown; quotes?: unknown };
-    if (Array.isArray(maybe.data)) return maybe.data as EnviosRawRate[];
-    if (Array.isArray(maybe.rates)) return maybe.rates as EnviosRawRate[];
-    if (Array.isArray(maybe.quotes)) return maybe.quotes as EnviosRawRate[];
+    const maybe = payload as {
+      data?: unknown;
+      rates?: unknown;
+      quotes?: unknown;
+      items?: unknown;
+      result?: unknown;
+      results?: unknown;
+    };
+    const candidates = [maybe.data, maybe.rates, maybe.quotes, maybe.items, maybe.result, maybe.results];
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate as EnviosRawRate[];
+      if (candidate && typeof candidate === 'object') {
+        const nested = normalizeRates(candidate);
+        if (nested.length > 0) return nested;
+      }
+    }
   }
   return [];
 }
@@ -129,8 +146,8 @@ export async function enviosFetchRates(params: {
       const id = String(r.id ?? r.service_id ?? `envios_${index + 1}`);
       const service = String(r.service ?? r.name ?? 'Servicio estándar');
       const carrier = String(r.carrier ?? r.provider ?? 'envios.com');
-      const cost = parseCurrency(r.price ?? r.amount ?? r.total);
-      const est = parsePositiveInt(r.estimated_days, 0);
+      const cost = parseCurrency(r.price ?? r.amount ?? r.total ?? r.total_price ?? r.totalPrice);
+      const est = parsePositiveInt(r.estimated_days ?? r.delivery_days ?? r.deliveryDays ?? r.days, 0);
       const minDays = parsePositiveInt(r.min_days, est || 1);
       const maxDays = parsePositiveInt(r.max_days, Math.max(minDays, est || minDays));
       return {

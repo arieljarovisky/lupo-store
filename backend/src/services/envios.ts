@@ -114,6 +114,26 @@ function looksLikeRateRow(value: unknown): value is EnviosRawRate {
   );
 }
 
+function sanitizePostalForRetry(raw: string): string {
+  const t = String(raw ?? '').trim().toUpperCase();
+  const digits = t.replace(/\D/g, '');
+  if (digits.length >= 4) return digits;
+  return t;
+}
+
+async function enviosRateRequest(url: string, token: string, body: Record<string, unknown>): Promise<string> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: defaultHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Envios.com (cotización): HTTP ${res.status}. ${text.slice(0, 260)}`);
+  }
+  return text;
+}
+
 function defaultHeaders(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
@@ -237,15 +257,7 @@ export async function enviosFetchRates(params: {
   };
 
   const url = `${enviosBaseUrl()}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: defaultHeaders(token),
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`Envios.com (cotización): HTTP ${res.status}. ${text.slice(0, 260)}`);
-  }
+  let text = await enviosRateRequest(url, token, body);
 
   let parsed: unknown = null;
   try {
@@ -262,6 +274,83 @@ export async function enviosFetchRates(params: {
       typeof detailCandidate === 'string'
         ? detailCandidate
         : JSON.stringify(detailCandidate ?? parsed).slice(0, 320);
+    if (/internal error/i.test(detailText)) {
+      const retryBody = {
+        origin: {
+          name: originName,
+          phone: originPhone,
+          street: originStreet,
+          city: originCity,
+          state: originState,
+          country,
+          postalCode: sanitizePostalForRetry(params.postalCodeOrigin),
+        },
+        destination: {
+          name: process.env.ENVIOS_DESTINATION_NAME_FALLBACK?.trim() || 'Cliente',
+          street:
+            process.env.ENVIOS_DESTINATION_STREET_FALLBACK?.trim() ||
+            params.destination?.city?.trim() ||
+            'Direccion',
+          phone: process.env.ENVIOS_DESTINATION_PHONE_FALLBACK?.trim() || '1111111111',
+          city: params.destination?.city?.trim() || originCity,
+          state: destinationState || originState,
+          country,
+          postalCode: sanitizePostalForRetry(params.postalCodeDestination),
+        },
+        packages: [
+          {
+            weight: Math.max(1, Math.round(weightKg)),
+            length: params.dimensions.length,
+            width: params.dimensions.width,
+            height: params.dimensions.height,
+          },
+        ],
+      };
+      const retryText = await enviosRateRequest(url, token, retryBody);
+      let retryParsed: unknown = null;
+      try {
+        retryParsed = retryText ? (JSON.parse(retryText) as unknown) : null;
+      } catch {
+        throw new Error('Envios.com devolvió respuesta inválida en reintento de cotización.');
+      }
+      const retryRows = normalizeRates(retryParsed);
+      if (retryRows.length > 0) {
+        return retryRows
+          .map((r, index) => {
+            const id = String(r.id ?? r.service_id ?? `envios_${index + 1}`);
+            const service = String(r.service ?? r.name ?? 'Servicio estándar');
+            const carrier = String(r.carrier ?? r.provider ?? 'envios.com');
+            const cost = parseCurrency(r.price ?? r.amount ?? r.total ?? r.total_price ?? r.totalPrice);
+            const est = parsePositiveInt(r.estimated_days ?? r.delivery_days ?? r.deliveryDays ?? r.days, 0);
+            const minDays = parsePositiveInt(r.min_days, est || 1);
+            const maxDays = parsePositiveInt(r.max_days, Math.max(minDays, est || minDays));
+            return {
+              id,
+              label: `${carrier} - ${service}`,
+              carrier,
+              cost,
+              minDays,
+              maxDays: Math.max(minDays, maxDays),
+            };
+          })
+          .filter((r) => r.cost >= 0);
+      }
+      const retryRoot =
+        retryParsed && typeof retryParsed === 'object' ? (retryParsed as Record<string, unknown>) : {};
+      const retryDetailCandidate =
+        retryRoot.message ??
+        retryRoot.error ??
+        retryRoot.detail ??
+        retryRoot.errors ??
+        retryRoot.meta ??
+        retryRoot.data ??
+        retryParsed;
+      const retryDetail =
+        typeof retryDetailCandidate === 'string'
+          ? retryDetailCandidate
+          : JSON.stringify(retryDetailCandidate ?? retryParsed).slice(0, 320);
+      throw new Error(`Envios.com no devolvió tarifas (reintento). Detalle API: ${retryDetail}`);
+    }
     throw new Error(`Envios.com no devolvió tarifas. Detalle API: ${detailText}`);
   }
   return rows

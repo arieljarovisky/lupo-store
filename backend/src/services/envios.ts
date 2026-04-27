@@ -51,6 +51,45 @@ function parseCurrency(raw: unknown): number {
   return Math.round(n);
 }
 
+function normalizeArgentinaStateCode(raw: string | null | undefined): string | undefined {
+  const v = String(raw ?? '').trim();
+  if (!v) return undefined;
+  if (/^AR-[A-Z]$/i.test(v)) return v.toUpperCase();
+  if (/^[A-Z]$/i.test(v)) return `AR-${v.toUpperCase()}`;
+  const key = v
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  const map: Record<string, string> = {
+    'ciudad autonoma de buenos aires': 'AR-C',
+    caba: 'AR-C',
+    'buenos aires': 'AR-B',
+    catamarca: 'AR-K',
+    chaco: 'AR-H',
+    chubut: 'AR-U',
+    cordoba: 'AR-X',
+    corrientes: 'AR-W',
+    'entre rios': 'AR-E',
+    formosa: 'AR-P',
+    jujuy: 'AR-Y',
+    'la pampa': 'AR-L',
+    'la rioja': 'AR-F',
+    mendoza: 'AR-M',
+    misiones: 'AR-N',
+    neuquen: 'AR-Q',
+    'rio negro': 'AR-R',
+    salta: 'AR-A',
+    'san juan': 'AR-J',
+    'san luis': 'AR-D',
+    'santa cruz': 'AR-Z',
+    'santa fe': 'AR-S',
+    'santiago del estero': 'AR-G',
+    'tierra del fuego': 'AR-V',
+    tucuman: 'AR-T',
+  };
+  return map[key];
+}
+
 function looksLikeRateRow(value: unknown): value is EnviosRawRate {
   if (!value || typeof value !== 'object') return false;
   const r = value as Record<string, unknown>;
@@ -127,6 +166,16 @@ export async function enviosFetchRates(params: {
     throw new Error('Falta ENVIOS_API_TOKEN.');
   }
   const country = process.env.ENVIOS_COUNTRY_CODE?.trim() || 'AR';
+  const originState =
+    normalizeArgentinaStateCode(process.env.ENVIOS_ORIGIN_STATE?.trim()) ||
+    process.env.ENVIOS_ORIGIN_STATE?.trim() ||
+    undefined;
+  const destinationState =
+    normalizeArgentinaStateCode(params.destination?.state) ||
+    normalizeArgentinaStateCode(process.env.ENVIOS_DESTINATION_STATE_FALLBACK?.trim()) ||
+    params.destination?.state?.trim() ||
+    process.env.ENVIOS_DESTINATION_STATE_FALLBACK?.trim() ||
+    undefined;
   const endpoint = process.env.ENVIOS_RATES_PATH?.trim() || '/ship/rate';
   const weightKgRaw = Number(params.dimensions.weight) / 1000;
   const weightKg = Number.isFinite(weightKgRaw) && weightKgRaw > 0 ? Number(weightKgRaw.toFixed(2)) : 1;
@@ -140,14 +189,14 @@ export async function enviosFetchRates(params: {
       number: process.env.ENVIOS_ORIGIN_NUMBER?.trim() || undefined,
       district: process.env.ENVIOS_ORIGIN_DISTRICT?.trim() || undefined,
       city: process.env.ENVIOS_ORIGIN_CITY?.trim() || undefined,
-      state: process.env.ENVIOS_ORIGIN_STATE?.trim() || undefined,
+      state: originState,
       postalCode: params.postalCodeOrigin,
       country,
     },
     destination: {
       name: process.env.ENVIOS_DESTINATION_NAME_FALLBACK?.trim() || 'Cliente',
       city: params.destination?.city?.trim() || undefined,
-      state: params.destination?.state?.trim() || undefined,
+      state: destinationState,
       postalCode: params.postalCodeDestination,
       country,
     },

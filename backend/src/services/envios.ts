@@ -90,6 +90,18 @@ function normalizeArgentinaStateCode(raw: string | null | undefined): string | u
   return map[key];
 }
 
+function isCabaDestination(city: string | null | undefined, postalCode: string | null | undefined): boolean {
+  const c = String(city ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  const cp = String(postalCode ?? '').trim().toUpperCase();
+  if (c.includes('caba') || c.includes('ciudad autonoma de buenos aires')) return true;
+  if (cp.startsWith('C')) return true;
+  return false;
+}
+
 function looksLikeRateRow(value: unknown): value is EnviosRawRate {
   if (!value || typeof value !== 'object') return false;
   const r = value as Record<string, unknown>;
@@ -170,25 +182,37 @@ export async function enviosFetchRates(params: {
     normalizeArgentinaStateCode(process.env.ENVIOS_ORIGIN_STATE?.trim()) ||
     process.env.ENVIOS_ORIGIN_STATE?.trim() ||
     undefined;
-  const destinationState =
+  const destinationStateRaw =
     normalizeArgentinaStateCode(params.destination?.state) ||
     normalizeArgentinaStateCode(process.env.ENVIOS_DESTINATION_STATE_FALLBACK?.trim()) ||
     params.destination?.state?.trim() ||
     process.env.ENVIOS_DESTINATION_STATE_FALLBACK?.trim() ||
     undefined;
+  const destinationState = isCabaDestination(params.destination?.city, params.postalCodeDestination)
+    ? 'C'
+    : destinationStateRaw;
   const endpoint = process.env.ENVIOS_RATES_PATH?.trim() || '/ship/rate';
+  const originName = process.env.ENVIOS_ORIGIN_NAME?.trim();
+  const originPhone = process.env.ENVIOS_ORIGIN_PHONE?.trim();
+  const originStreet = process.env.ENVIOS_ORIGIN_STREET?.trim();
+  const originCity = process.env.ENVIOS_ORIGIN_CITY?.trim();
+  if (!originName || !originPhone || !originStreet || !originCity || !originState) {
+    throw new Error(
+      'Faltan datos de origen para cotizar en Envia (ENVIOS_ORIGIN_NAME, PHONE, STREET, CITY, STATE).'
+    );
+  }
   const weightKgRaw = Number(params.dimensions.weight) / 1000;
   const weightKg = Number.isFinite(weightKgRaw) && weightKgRaw > 0 ? Number(weightKgRaw.toFixed(2)) : 1;
   const body = {
     origin: {
-      name: process.env.ENVIOS_ORIGIN_NAME?.trim() || 'Origen',
+      name: originName,
       company: process.env.ENVIOS_ORIGIN_COMPANY?.trim() || undefined,
       email: process.env.ENVIOS_ORIGIN_EMAIL?.trim() || undefined,
-      phone: process.env.ENVIOS_ORIGIN_PHONE?.trim() || undefined,
-      street: process.env.ENVIOS_ORIGIN_STREET?.trim() || undefined,
+      phone: originPhone,
+      street: originStreet,
       number: process.env.ENVIOS_ORIGIN_NUMBER?.trim() || undefined,
       district: process.env.ENVIOS_ORIGIN_DISTRICT?.trim() || undefined,
-      city: process.env.ENVIOS_ORIGIN_CITY?.trim() || undefined,
+      city: originCity,
       state: originState,
       postalCode: params.postalCodeOrigin,
       country,
@@ -199,6 +223,8 @@ export async function enviosFetchRates(params: {
       state: destinationState,
       postalCode: params.postalCodeDestination,
       country,
+      phone: process.env.ENVIOS_DESTINATION_PHONE_FALLBACK?.trim() || undefined,
+      street: process.env.ENVIOS_DESTINATION_STREET_FALLBACK?.trim() || undefined,
     },
     packages: [
       {
@@ -228,6 +254,16 @@ export async function enviosFetchRates(params: {
     throw new Error('Envios.com devolvió una respuesta inválida (no JSON).');
   }
   const rows = normalizeRates(parsed);
+  if (rows.length === 0) {
+    const root = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+    const detailCandidate =
+      root.message ?? root.error ?? root.detail ?? root.errors ?? root.meta ?? root.data ?? parsed;
+    const detailText =
+      typeof detailCandidate === 'string'
+        ? detailCandidate
+        : JSON.stringify(detailCandidate ?? parsed).slice(0, 320);
+    throw new Error(`Envios.com no devolvió tarifas. Detalle API: ${detailText}`);
+  }
   return rows
     .map((r, index) => {
       const id = String(r.id ?? r.service_id ?? `envios_${index + 1}`);

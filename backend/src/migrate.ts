@@ -238,6 +238,72 @@ export async function runMigrations(p: Pool): Promise<void> {
     'shipping_status',
     "`shipping_status` VARCHAR(40) DEFAULT NULL AFTER `shipping_provider`"
   );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_option_id',
+    "`shipping_option_id` VARCHAR(120) DEFAULT NULL AFTER `shipping_status`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_label',
+    "`shipping_label` VARCHAR(255) DEFAULT NULL AFTER `shipping_option_id`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_zipcode',
+    "`shipping_zipcode` VARCHAR(40) DEFAULT NULL AFTER `shipping_label`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_address_line',
+    "`shipping_address_line` VARCHAR(255) DEFAULT NULL AFTER `shipping_zipcode`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_city',
+    "`shipping_city` VARCHAR(120) DEFAULT NULL AFTER `shipping_address_line`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_province',
+    "`shipping_province` VARCHAR(120) DEFAULT NULL AFTER `shipping_city`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_country',
+    "`shipping_country` VARCHAR(8) DEFAULT NULL AFTER `shipping_province`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_recipient_name',
+    "`shipping_recipient_name` VARCHAR(255) DEFAULT NULL AFTER `shipping_country`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_label_url',
+    "`shipping_label_url` TEXT DEFAULT NULL AFTER `shipping_recipient_name`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_tracking_url',
+    "`shipping_tracking_url` TEXT DEFAULT NULL AFTER `shipping_label_url`"
+  );
+  await addColumn(
+    p,
+    'orders',
+    'shipping_provider_shipment_id',
+    "`shipping_provider_shipment_id` VARCHAR(120) DEFAULT NULL AFTER `shipping_tracking_url`"
+  );
 
   await p.query(
     'CREATE INDEX idx_products_sku ON products (sku)'

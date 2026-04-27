@@ -66,8 +66,19 @@ export interface Order {
   total: number;
   currency: string;
   shippingTrackingNumber: string | null;
+  shippingTrackingUrl?: string | null;
   shippingProvider: string | null;
   shippingStatus: string | null;
+  shippingOptionId?: string | null;
+  shippingLabel?: string | null;
+  shippingZipcode?: string | null;
+  shippingAddressLine?: string | null;
+  shippingCity?: string | null;
+  shippingProvince?: string | null;
+  shippingCountry?: string | null;
+  shippingRecipientName?: string | null;
+  shippingLabelUrl?: string | null;
+  shippingProviderShipmentId?: string | null;
   createdAt: string;
   items: OrderItem[];
 }

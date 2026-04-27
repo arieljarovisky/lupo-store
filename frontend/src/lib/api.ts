@@ -339,8 +339,19 @@ export interface AdminOrder {
   currency: string;
   createdAt: string;
   shippingTrackingNumber: string | null;
+  shippingTrackingUrl?: string | null;
   shippingProvider: string | null;
   shippingStatus: string | null;
+  shippingOptionId?: string | null;
+  shippingLabel?: string | null;
+  shippingZipcode?: string | null;
+  shippingAddressLine?: string | null;
+  shippingCity?: string | null;
+  shippingProvince?: string | null;
+  shippingCountry?: string | null;
+  shippingRecipientName?: string | null;
+  shippingLabelUrl?: string | null;
+  shippingProviderShipmentId?: string | null;
   items: Array<{
     id: number;
     productId: string;
@@ -356,7 +367,7 @@ export type CheckoutShippingEngine = 'micorreo' | 'envios' | 'local';
 export interface CheckoutShippingQuoteOption {
   id: string;
   provider: 'tiendanube' | 'micorreo' | 'envios';
-  carrier: 'correo_argentino';
+  carrier: string;
   label: string;
   cost: number;
   minDays: number;
@@ -467,6 +478,11 @@ export async function createCheckoutOrder(params: {
   shippingOptionId?: string;
   shippingProvider?: string;
   shippingZipcode?: string;
+  shippingAddressLine?: string;
+  shippingCity?: string;
+  shippingProvince?: string;
+  shippingCountry?: string;
+  shippingRecipientName?: string;
   shippingAgencyCode?: string;
   shippingAgencyName?: string;
   shippingDeliveredType?: 'D' | 'S';
@@ -536,6 +552,44 @@ export async function payOrderWithMercadoPagoCard(params: {
       return { ok: false, error: data.error || `HTTP ${res.status}` };
     }
     return { ok: true, paymentStatus: data.paymentStatus, orderStatus: data.orderStatus };
+  } catch (e) {
+    if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
+    throw e;
+  }
+}
+
+export async function adminGenerateOrderShipmentLabel(
+  orderId: number
+): Promise<
+  | { ok: true; trackingNumber: string; trackingUrl: string | null; labelUrl: string | null }
+  | { ok: false; error: string }
+> {
+  const base = apiBase();
+  const url = base
+    ? `${base}/api/admin/orders/${orderId}/shipment/generate-label`
+    : `/api/admin/orders/${orderId}/shipment/generate-label`;
+  try {
+    const res = await fetch(url, { method: 'POST', headers: adminAuthHeaders() });
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      clearAdminToken();
+      return { ok: false, error: 'Sesión expirada.' };
+    }
+    let data: { ok?: boolean; trackingNumber?: string; trackingUrl?: string | null; labelUrl?: string | null; error?: string } = {};
+    try {
+      data = JSON.parse(text) as typeof data;
+    } catch {
+      return { ok: false, error: apiErrorMessage(res, text) };
+    }
+    if (!res.ok || !data.ok || !data.trackingNumber) {
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return {
+      ok: true,
+      trackingNumber: data.trackingNumber,
+      trackingUrl: data.trackingUrl ?? null,
+      labelUrl: data.labelUrl ?? null,
+    };
   } catch (e) {
     if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };
     throw e;

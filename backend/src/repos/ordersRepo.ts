@@ -6,6 +6,7 @@ import type { Order, OrderItem, PaymentMethod } from '../types.js';
 import {
   enviosDefaultDimensions,
   enviosFetchRates,
+  enviosGenerateLabel,
   enviosIsConfigured,
 } from '../services/envios.js';
 import {
@@ -115,7 +116,7 @@ export type CheckoutShippingEngine = 'micorreo' | 'envios' | 'local';
 export interface CheckoutShippingQuoteOption {
   id: string;
   provider: 'tiendanube' | 'micorreo' | 'envios';
-  carrier: 'correo_argentino';
+  carrier: string;
   label: string;
   cost: number;
   minDays: number;
@@ -317,7 +318,7 @@ export async function quoteCheckoutShipping(params: {
       const options: CheckoutShippingQuoteOption[] = rows.map((r) => ({
         id: `envios:${r.id}`,
         provider: 'envios',
-        carrier: 'correo_argentino',
+        carrier: r.carrier || 'envios',
         label: `${r.label} (envios.com)`,
         cost: r.cost,
         minDays: r.minDays,
@@ -436,6 +437,11 @@ export async function createCheckoutOrder(params: {
   shippingOptionId?: string | null;
   shippingProvider?: string | null;
   shippingZipcode?: string | null;
+  shippingAddressLine?: string | null;
+  shippingCity?: string | null;
+  shippingProvince?: string | null;
+  shippingCountry?: string | null;
+  shippingRecipientName?: string | null;
   shippingAgencyCode?: string | null;
   shippingAgencyName?: string | null;
   shippingDeliveredType?: 'D' | 'S' | null;
@@ -464,6 +470,11 @@ export async function createCheckoutOrder(params: {
   const shippingOptionId = params.shippingOptionId?.trim() || null;
   const shippingProvider = params.shippingProvider?.trim() || null;
   const shippingZipcode = params.shippingZipcode?.trim() || null;
+  const shippingAddressLine = params.shippingAddressLine?.trim() || null;
+  const shippingCity = params.shippingCity?.trim() || null;
+  const shippingProvince = params.shippingProvince?.trim() || null;
+  const shippingCountry = (params.shippingCountry?.trim() || 'AR').toUpperCase();
+  const shippingRecipientName = params.shippingRecipientName?.trim() || null;
   const shippingAgencyCode = params.shippingAgencyCode?.trim() || null;
   const shippingAgencyName = params.shippingAgencyName?.trim() || null;
   const shippingDeliveredType = params.shippingDeliveredType === 'S' ? 'S' : params.shippingDeliveredType === 'D' ? 'D' : null;
@@ -526,9 +537,11 @@ export async function createCheckoutOrder(params: {
     const [ins] = await conn.query<ResultSetHeader>(
       `INSERT INTO orders (
         customer_id, guest_email, guest_phone, payment_method, installments, installment_interest_rate,
-        status, payment_status, subtotal, total, currency, notes
+        status, payment_status, subtotal, total, currency, notes,
+        shipping_option_id, shipping_label, shipping_provider, shipping_zipcode,
+        shipping_address_line, shipping_city, shipping_province, shipping_country, shipping_recipient_name
       )
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, 'ARS', ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, 'ARS', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         params.customerId ?? null,
         email,
@@ -540,6 +553,15 @@ export async function createCheckoutOrder(params: {
         subtotal,
         total,
         notes || null,
+        shippingOptionId,
+        shippingLabel,
+        shippingProvider,
+        shippingZipcode,
+        shippingAddressLine,
+        shippingCity,
+        shippingProvince,
+        shippingCountry,
+        shippingRecipientName,
       ]
     );
     orderId = Number(ins.insertId);
@@ -870,6 +892,95 @@ export async function updateOrderShipment(params: {
   }
 }
 
+export async function generateOrderShipmentLabel(orderId: number): Promise<{
+  trackingNumber: string;
+  trackingUrl: string | null;
+  labelUrl: string | null;
+}> {
+  if (!enviosIsConfigured()) {
+    throw new Error('Envios.com no está configurado en el backend.');
+  }
+  const p = await getPool();
+  const [rows] = await p.query<RowDataPacket[]>(
+    `SELECT
+      id, guest_email, guest_phone, subtotal,
+      shipping_option_id, shipping_provider, shipping_zipcode,
+      shipping_address_line, shipping_city, shipping_province, shipping_country, shipping_recipient_name
+     FROM orders
+     WHERE id = ?
+     LIMIT 1`,
+    [orderId]
+  );
+  if (!rows.length) {
+    throw new Error('Pedido no encontrado.');
+  }
+  const order = rows[0];
+  const shippingOptionId = String(order.shipping_option_id ?? '').trim();
+  const service = shippingOptionId.startsWith('envios:') ? shippingOptionId.slice('envios:'.length) : '';
+  if (!service) {
+    throw new Error('Este pedido no tiene un servicio de envios.com asociado para generar etiqueta.');
+  }
+  const address = String(order.shipping_address_line ?? '').trim();
+  const city = String(order.shipping_city ?? '').trim();
+  const province = String(order.shipping_province ?? '').trim();
+  const zipcode = String(order.shipping_zipcode ?? '').trim();
+  const recipient = String(order.shipping_recipient_name ?? '').trim();
+  const phone = String(order.guest_phone ?? '').trim();
+  if (!address || !city || !province || !zipcode || !recipient || !phone) {
+    throw new Error(
+      'Faltan datos de envío del pedido (nombre, teléfono, dirección, ciudad, provincia o código postal).'
+    );
+  }
+
+  const dims = enviosDefaultDimensions();
+  const generated = await enviosGenerateLabel({
+    service,
+    orderReference: `#${orderId}`,
+    destination: {
+      name: recipient,
+      phone,
+      email: order.guest_email != null ? String(order.guest_email) : null,
+      address,
+      city,
+      state: province,
+      postalCode: zipcode,
+      country: String(order.shipping_country ?? 'AR').trim().toUpperCase() || 'AR',
+    },
+    packageData: {
+      content: process.env.ENVIOS_PACKAGE_CONTENT?.trim() || 'Ropa',
+      declaredValue: Math.max(0, Math.round(Number(order.subtotal ?? 0))),
+      weight: dims.weight,
+      height: dims.height,
+      width: dims.width,
+      length: dims.length,
+    },
+  });
+  if (!generated.trackingNumber) {
+    throw new Error('Envios.com no devolvió tracking number al generar la etiqueta.');
+  }
+
+  await p.query(
+    `UPDATE orders
+     SET shipping_tracking_number = ?, shipping_tracking_url = ?, shipping_label_url = ?,
+         shipping_provider_shipment_id = ?, shipping_provider = ?, shipping_status = 'created'
+     WHERE id = ?`,
+    [
+      generated.trackingNumber,
+      generated.trackingUrl,
+      generated.labelUrl,
+      generated.shipmentId,
+      generated.carrier || 'envios',
+      orderId,
+    ]
+  );
+
+  return {
+    trackingNumber: generated.trackingNumber,
+    trackingUrl: generated.trackingUrl,
+    labelUrl: generated.labelUrl,
+  };
+}
+
 export async function getOrderNotificationSnapshot(orderId: number): Promise<OrderNotificationSnapshot | null> {
   const p = await getPool();
   const [rows] = await p.query<RowDataPacket[]>(
@@ -909,7 +1020,9 @@ export async function listOrdersForAdmin(limit = 100): Promise<Order[]> {
     `SELECT
       id, customer_id, guest_email, guest_phone, payment_method, installments, installment_interest_rate,
       payment_reference, status, payment_status, subtotal, total, currency, created_at,
-      shipping_tracking_number, shipping_provider, shipping_status
+      shipping_tracking_number, shipping_tracking_url, shipping_provider, shipping_status, shipping_option_id, shipping_label,
+      shipping_zipcode, shipping_address_line, shipping_city, shipping_province, shipping_country, shipping_recipient_name,
+      shipping_label_url, shipping_provider_shipment_id
      FROM orders ORDER BY created_at DESC LIMIT ?`,
     [Math.min(limit, 500)]
   );
@@ -944,8 +1057,20 @@ export async function listOrdersForAdmin(limit = 100): Promise<Order[]> {
       total: Number(o.total),
       currency: String(o.currency ?? 'ARS'),
       shippingTrackingNumber: o.shipping_tracking_number != null ? String(o.shipping_tracking_number) : null,
+      shippingTrackingUrl: o.shipping_tracking_url != null ? String(o.shipping_tracking_url) : null,
       shippingProvider: o.shipping_provider != null ? String(o.shipping_provider) : null,
       shippingStatus: o.shipping_status != null ? String(o.shipping_status) : null,
+      shippingOptionId: o.shipping_option_id != null ? String(o.shipping_option_id) : null,
+      shippingLabel: o.shipping_label != null ? String(o.shipping_label) : null,
+      shippingZipcode: o.shipping_zipcode != null ? String(o.shipping_zipcode) : null,
+      shippingAddressLine: o.shipping_address_line != null ? String(o.shipping_address_line) : null,
+      shippingCity: o.shipping_city != null ? String(o.shipping_city) : null,
+      shippingProvince: o.shipping_province != null ? String(o.shipping_province) : null,
+      shippingCountry: o.shipping_country != null ? String(o.shipping_country) : null,
+      shippingRecipientName: o.shipping_recipient_name != null ? String(o.shipping_recipient_name) : null,
+      shippingLabelUrl: o.shipping_label_url != null ? String(o.shipping_label_url) : null,
+      shippingProviderShipmentId:
+        o.shipping_provider_shipment_id != null ? String(o.shipping_provider_shipment_id) : null,
       createdAt: new Date(String(o.created_at)).toISOString(),
       items,
     });

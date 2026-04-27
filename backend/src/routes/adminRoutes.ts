@@ -3,6 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { requireAdmin } from '../middleware/auth.js';
 import {
   cancelOrderAndRestoreStock,
+  generateOrderShipmentLabel,
   getOrderNotificationSnapshot,
   listOrdersForAdmin,
   updateOrderShipment,
@@ -84,6 +85,25 @@ adminRouter.patch('/orders/:orderId/shipment', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'No se pudo asignar número de envío.';
+    res.status(400).json({ error: msg });
+  }
+});
+
+adminRouter.post('/orders/:orderId/shipment/generate-label', async (req, res) => {
+  try {
+    const orderId = Number(req.params.orderId);
+    if (!Number.isFinite(orderId) || orderId <= 0) {
+      res.status(400).json({ error: 'Pedido inválido.' });
+      return;
+    }
+    const result = await generateOrderShipmentLabel(orderId);
+    const order = await getOrderNotificationSnapshot(orderId);
+    if (order) {
+      await sendOrderNotificationEmail('shipment_assigned', order);
+    }
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'No se pudo generar la etiqueta de envío.';
     res.status(400).json({ error: msg });
   }
 });

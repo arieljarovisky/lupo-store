@@ -246,6 +246,11 @@ orderRouter.post('/checkout', async (req, res) => {
       shippingOptionId?: string;
       shippingProvider?: string;
       shippingZipcode?: string;
+      shippingAddressLine?: string;
+      shippingCity?: string;
+      shippingProvince?: string;
+      shippingCountry?: string;
+      shippingRecipientName?: string;
       shippingAgencyCode?: string;
       shippingAgencyName?: string;
       shippingDeliveredType?: 'D' | 'S';
@@ -267,6 +272,11 @@ orderRouter.post('/checkout', async (req, res) => {
       shippingOptionId: body.shippingOptionId,
       shippingProvider: body.shippingProvider,
       shippingZipcode: body.shippingZipcode,
+      shippingAddressLine: body.shippingAddressLine,
+      shippingCity: body.shippingCity,
+      shippingProvince: body.shippingProvince,
+      shippingCountry: body.shippingCountry,
+      shippingRecipientName: body.shippingRecipientName,
       shippingAgencyCode: body.shippingAgencyCode,
       shippingAgencyName: body.shippingAgencyName,
       shippingDeliveredType: body.shippingDeliveredType,

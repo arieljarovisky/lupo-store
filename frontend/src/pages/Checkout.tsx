@@ -273,6 +273,11 @@ export function Checkout() {
       shippingOptionId: selectedShipping.id,
       shippingProvider: selectedShipping.provider,
       shippingZipcode: zip,
+      shippingAddressLine: address,
+      shippingCity: city,
+      shippingProvince: shippingProvince.trim() || undefined,
+      shippingCountry: 'AR',
+      shippingRecipientName: `${firstName} ${lastName}`.trim(),
       shippingAgencyCode:
         shippingEngine === 'micorreo' && shippingDeliveredType === 'S' && selectedAgency
           ? selectedAgency.code
@@ -599,6 +604,11 @@ export function Checkout() {
       shippingOptionId: selectedShipping.id,
       shippingProvider: selectedShipping.provider,
       shippingZipcode: zip,
+      shippingAddressLine: address,
+      shippingCity: city,
+      shippingProvince: shippingProvince.trim() || undefined,
+      shippingCountry: 'AR',
+      shippingRecipientName: `${firstName} ${lastName}`.trim(),
       shippingAgencyCode:
         shippingEngine === 'micorreo' && shippingDeliveredType === 'S' && selectedAgency
           ? selectedAgency.code

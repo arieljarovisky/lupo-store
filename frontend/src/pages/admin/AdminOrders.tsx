@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Ban } from 'lucide-react';
-import { adminCancelOrder, adminUpdateOrderShipment, fetchAdminOrders, type AdminOrder } from '../../lib/api';
+import { Download, Ban, PackagePlus } from 'lucide-react';
+import {
+  adminCancelOrder,
+  adminGenerateOrderShipmentLabel,
+  adminUpdateOrderShipment,
+  fetchAdminOrders,
+  type AdminOrder,
+} from '../../lib/api';
 import { downloadOrdersCsv } from '../../lib/adminExport';
 
 function paymentMethodLabel(order: AdminOrder): string {
@@ -18,6 +24,7 @@ export function AdminOrders() {
   const [error, setError] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [savingShipmentId, setSavingShipmentId] = useState<number | null>(null);
+  const [generatingLabelId, setGeneratingLabelId] = useState<number | null>(null);
   const [trackingInputs, setTrackingInputs] = useState<Record<number, string>>({});
   const [cancelError, setCancelError] = useState<string | null>(null);
 
@@ -75,6 +82,18 @@ export function AdminOrders() {
       status: 'in_transit',
     });
     setSavingShipmentId(null);
+    if ('error' in r) {
+      setCancelError(r.error);
+      return;
+    }
+    reloadOrders();
+  };
+
+  const handleGenerateLabel = async (order: AdminOrder) => {
+    setCancelError(null);
+    setGeneratingLabelId(order.id);
+    const r = await adminGenerateOrderShipmentLabel(order.id);
+    setGeneratingLabelId(null);
     if ('error' in r) {
       setCancelError(r.error);
       return;
@@ -166,9 +185,15 @@ export function AdminOrders() {
                   <span className="text-[#888]">Tracking: </span>
                   <span className="font-medium">{o.shippingTrackingNumber || 'Sin asignar'}</span>
                 </span>
+                <span>
+                  <span className="text-[#888]">Destino: </span>
+                  <span className="font-medium">
+                    {o.shippingAddressLine && o.shippingCity ? `${o.shippingAddressLine}, ${o.shippingCity}` : '—'}
+                  </span>
+                </span>
               </div>
               <div className="px-5 pb-4">
-                <div className="flex flex-col md:flex-row gap-2 md:items-center">
+                <div className="flex flex-col md:flex-row gap-2 md:items-center md:flex-wrap">
                   <input
                     value={trackingInputs[o.id] ?? ''}
                     onChange={(e) =>
@@ -185,6 +210,25 @@ export function AdminOrders() {
                   >
                     {savingShipmentId === o.id ? 'Guardando…' : 'Guardar envío'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateLabel(o)}
+                    disabled={generatingLabelId === o.id}
+                    className="inline-flex items-center justify-center gap-2 border border-lupo-black bg-white text-lupo-black px-4 py-2 text-[11px] uppercase tracking-[1px] font-semibold hover:bg-lupo-black hover:text-white disabled:opacity-60"
+                  >
+                    <PackagePlus size={14} strokeWidth={1.5} />
+                    {generatingLabelId === o.id ? 'Generando…' : 'Generar etiqueta'}
+                  </button>
+                  {o.shippingLabelUrl && (
+                    <a
+                      href={o.shippingLabelUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[12px] underline text-lupo-black"
+                    >
+                      Abrir etiqueta
+                    </a>
+                  )}
                 </div>
               </div>
               <div className="px-5 pb-5 overflow-x-auto">

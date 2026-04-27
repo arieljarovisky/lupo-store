@@ -27,6 +27,15 @@ export type EnviosRate = {
   maxDays: number;
 };
 
+export type EnviosGeneratedLabel = {
+  shipmentId: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  labelUrl: string | null;
+  carrier: string | null;
+  service: string | null;
+};
+
 function normalizeBaseUrl(raw: string): string {
   return raw.trim().replace(/\/$/, '');
 }
@@ -40,6 +49,18 @@ function parseCurrency(raw: unknown): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 0) return 0;
   return Math.round(n);
+}
+
+function looksLikeRateRow(value: unknown): value is EnviosRawRate {
+  if (!value || typeof value !== 'object') return false;
+  const r = value as Record<string, unknown>;
+  return (
+    r.price != null ||
+    r.amount != null ||
+    r.total != null ||
+    r.total_price != null ||
+    r.totalPrice != null
+  );
 }
 
 function defaultHeaders(token: string): Record<string, string> {
@@ -71,26 +92,28 @@ export function enviosDefaultDimensions(): { weight: number; height: number; wid
 }
 
 function normalizeRates(payload: unknown): EnviosRawRate[] {
-  if (Array.isArray(payload)) return payload as EnviosRawRate[];
-  if (payload && typeof payload === 'object') {
-    const maybe = payload as {
-      data?: unknown;
-      rates?: unknown;
-      quotes?: unknown;
-      items?: unknown;
-      result?: unknown;
-      results?: unknown;
-    };
-    const candidates = [maybe.data, maybe.rates, maybe.quotes, maybe.items, maybe.result, maybe.results];
-    for (const candidate of candidates) {
-      if (Array.isArray(candidate)) return candidate as EnviosRawRate[];
-      if (candidate && typeof candidate === 'object') {
-        const nested = normalizeRates(candidate);
-        if (nested.length > 0) return nested;
+  const out: EnviosRawRate[] = [];
+  const stack: unknown[] = [payload];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        if (looksLikeRateRow(item)) out.push(item);
+        else stack.push(item);
+      }
+      continue;
+    }
+    if (current && typeof current === 'object') {
+      const obj = current as Record<string, unknown>;
+      if (looksLikeRateRow(obj)) out.push(obj);
+      for (const value of Object.values(obj)) {
+        if (value && (typeof value === 'object' || Array.isArray(value))) {
+          stack.push(value);
+        }
       }
     }
   }
-  return [];
+  return out;
 }
 
 export async function enviosFetchRates(params: {
@@ -160,4 +183,125 @@ export async function enviosFetchRates(params: {
       };
     })
     .filter((r) => r.cost >= 0);
+}
+
+export async function enviosGenerateLabel(params: {
+  service: string;
+  orderReference: string;
+  destination: {
+    name: string;
+    phone: string;
+    email?: string | null;
+    address: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
+  packageData: {
+    content: string;
+    declaredValue: number;
+    weight: number;
+    height: number;
+    width: number;
+    length: number;
+  };
+}): Promise<EnviosGeneratedLabel> {
+  const token = process.env.ENVIOS_API_TOKEN?.trim();
+  if (!token) throw new Error('Falta ENVIOS_API_TOKEN.');
+
+  const endpoint = process.env.ENVIOS_GENERATE_PATH?.trim() || '/ship/generate';
+  const country = process.env.ENVIOS_COUNTRY_CODE?.trim() || 'AR';
+  const originName = process.env.ENVIOS_ORIGIN_NAME?.trim();
+  const originPhone = process.env.ENVIOS_ORIGIN_PHONE?.trim();
+  const originStreet = process.env.ENVIOS_ORIGIN_STREET?.trim();
+  const originCity = process.env.ENVIOS_ORIGIN_CITY?.trim();
+  const originState = process.env.ENVIOS_ORIGIN_STATE?.trim();
+  const originPostalCode = process.env.ENVIOS_POSTAL_CODE_ORIGIN?.trim();
+  if (!originName || !originPhone || !originStreet || !originCity || !originState || !originPostalCode) {
+    throw new Error(
+      'Faltan datos de origen ENVIOS_ORIGIN_* para generar etiqueta (NAME, PHONE, STREET, CITY, STATE, POSTAL_CODE_ORIGIN).'
+    );
+  }
+
+  const body = {
+    origin: {
+      name: originName,
+      phone: originPhone,
+      street: originStreet,
+      city: originCity,
+      state: originState,
+      country,
+      postalCode: originPostalCode,
+    },
+    destination: {
+      name: params.destination.name,
+      phone: params.destination.phone,
+      email: params.destination.email || undefined,
+      street: params.destination.address,
+      city: params.destination.city,
+      state: params.destination.state,
+      country: params.destination.country || country,
+      postalCode: params.destination.postalCode,
+    },
+    packages: [
+      {
+        type: process.env.ENVIOS_PACKAGE_TYPE?.trim() || 'box',
+        content: params.packageData.content,
+        amount: 1,
+        declaredValue: Math.max(0, Math.round(params.packageData.declaredValue)),
+        weight: Math.max(1, Math.round(params.packageData.weight)),
+        weightUnit: 'g',
+        lengthUnit: 'cm',
+        dimensions: {
+          length: Math.max(1, Math.round(params.packageData.length)),
+          width: Math.max(1, Math.round(params.packageData.width)),
+          height: Math.max(1, Math.round(params.packageData.height)),
+        },
+      },
+    ],
+    shipment: {
+      type: 1,
+      carrier: process.env.ENVIOS_CARRIER_CODE?.trim() || 'correo_argentino',
+      service: params.service,
+    },
+    settings: {
+      comments: `Pedido ${params.orderReference}`,
+    },
+  };
+
+  const url = `${enviosBaseUrl()}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: defaultHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Envios.com (etiqueta): HTTP ${res.status}. ${text.slice(0, 300)}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = text ? (JSON.parse(text) as unknown) : null;
+  } catch {
+    throw new Error('Envios.com devolvió una respuesta inválida al generar etiqueta.');
+  }
+  const root = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  const data = (root.data && typeof root.data === 'object' ? root.data : root) as Record<string, unknown>;
+
+  return {
+    shipmentId: data.id != null ? String(data.id) : data.shipment_id != null ? String(data.shipment_id) : null,
+    trackingNumber:
+      data.trackingNumber != null
+        ? String(data.trackingNumber)
+        : data.tracking_number != null
+          ? String(data.tracking_number)
+          : null,
+    trackingUrl:
+      data.trackingUrl != null ? String(data.trackingUrl) : data.tracking_url != null ? String(data.tracking_url) : null,
+    labelUrl: data.label != null ? String(data.label) : data.label_url != null ? String(data.label_url) : null,
+    carrier: data.carrier != null ? String(data.carrier) : null,
+    service: data.service != null ? String(data.service) : null,
+  };
 }

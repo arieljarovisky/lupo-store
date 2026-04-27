@@ -143,6 +143,75 @@ function normalizeZipcode(raw: string): string {
   return t.replace(/[^A-Z0-9]/g, '');
 }
 
+type OrderRepoVariant = {
+  id: string;
+  name: string;
+  price: number;
+  stockQuantity: number;
+};
+
+function parseOrderRepoVariants(raw: unknown): OrderRepoVariant[] {
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((v): v is Record<string, unknown> => Boolean(v && typeof v === 'object'))
+      .map((v) => ({
+        id: String(v.id ?? '').trim(),
+        name: String(v.name ?? '').trim(),
+        price: Number(v.price ?? 0),
+        stockQuantity: Math.max(0, Number(v.stockQuantity ?? 0)),
+      }))
+      .filter((v) => Boolean(v.id && v.name));
+  } catch {
+    return [];
+  }
+}
+
+type ResolvedOrderItem = {
+  lineProductId: string;
+  parentProductId: string;
+  lineName: string;
+  unitPrice: number;
+  stockQuantity: number;
+  variantStockSnapshot?: OrderRepoVariant[];
+};
+
+async function resolveOrderItemForCheckout(productId: string): Promise<ResolvedOrderItem | null> {
+  const direct = await getProductById(productId);
+  if (direct) {
+    return {
+      lineProductId: direct.id,
+      parentProductId: direct.id,
+      lineName: direct.name,
+      unitPrice: Number(direct.price) || 0,
+      stockQuantity: Number(direct.stockQuantity) || 0,
+    };
+  }
+
+  const p = await getPool();
+  const [rows] = await p.query<RowDataPacket[]>(
+    `SELECT id, name, variants_json
+     FROM products
+     WHERE variants_json IS NOT NULL AND variants_json != ''`
+  );
+  for (const row of rows) {
+    const variants = parseOrderRepoVariants(row.variants_json);
+    const matched = variants.find((v) => v.id === productId);
+    if (!matched) continue;
+    return {
+      lineProductId: matched.id,
+      parentProductId: String(row.id),
+      lineName: `${String(row.name)} - ${matched.name}`,
+      unitPrice: Number(matched.price) || 0,
+      stockQuantity: Number(matched.stockQuantity) || 0,
+      variantStockSnapshot: variants,
+    };
+  }
+  return null;
+}
+
 function quoteCheckoutShippingLocal(params: {
   zipcode: string;
   subtotal: number;
@@ -223,11 +292,11 @@ export async function quoteCheckoutShipping(params: {
   for (const it of params.items) {
     const qty = Math.max(0, Math.floor(Number(it.quantity)));
     if (qty <= 0) continue;
-    const prod = await getProductById(String(it.productId));
-    if (!prod) {
+    const resolved = await resolveOrderItemForCheckout(String(it.productId));
+    if (!resolved) {
       throw new Error(`Producto no encontrado: ${it.productId}`);
     }
-    subtotal += qty * Math.round(Number(prod.price) || 0);
+    subtotal += qty * Math.round(Number(resolved.unitPrice) || 0);
   }
 
   const deliveredType: 'D' | 'S' = params.deliveredType === 'S' ? 'S' : 'D';
@@ -416,19 +485,19 @@ export async function createCheckoutOrder(params: {
       if (it.quantity < 1) {
         throw new Error('Cantidad inválida.');
       }
-      const prod = await getProductById(it.productId);
-      if (!prod) {
+      const resolved = await resolveOrderItemForCheckout(it.productId);
+      if (!resolved) {
         throw new Error(`Producto no encontrado: ${it.productId}`);
       }
-      if (prod.stockQuantity < it.quantity) {
-        throw new Error(`Stock insuficiente para «${prod.name}».`);
+      if (resolved.stockQuantity < it.quantity) {
+        throw new Error(`Stock insuficiente para «${resolved.lineName}».`);
       }
-      const unit = prod.price;
+      const unit = resolved.unitPrice;
       const line = unit * it.quantity;
       subtotal += line;
       lines.push({
-        productId: prod.id,
-        name: prod.name,
+        productId: resolved.lineProductId,
+        name: resolved.lineName,
         unit,
         qty: it.quantity,
         line,
@@ -477,10 +546,26 @@ export async function createCheckoutOrder(params: {
          VALUES (?, ?, ?, ?, ?, ?)`,
         [orderId, ln.productId, ln.name, ln.unit, ln.qty, ln.line]
       );
-      await conn.query(
-        'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
-        [ln.qty, ln.productId]
-      );
+      const resolved = await resolveOrderItemForCheckout(ln.productId);
+      if (!resolved) {
+        throw new Error(`Producto no encontrado al descontar stock: ${ln.productId}`);
+      }
+      if (!resolved.variantStockSnapshot?.length) {
+        await conn.query(
+          'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
+          [ln.qty, resolved.parentProductId]
+        );
+      } else {
+        const nextVariants = resolved.variantStockSnapshot.map((v) =>
+          v.id === ln.productId ? { ...v, stockQuantity: Math.max(0, v.stockQuantity - ln.qty) } : v
+        );
+        const nextStock = nextVariants.reduce((sum, v) => sum + Math.max(0, Number(v.stockQuantity) || 0), 0);
+        await conn.query('UPDATE products SET variants_json = ?, stock_quantity = ? WHERE id = ?', [
+          JSON.stringify(nextVariants),
+          nextStock,
+          resolved.parentProductId,
+        ]);
+      }
     }
 
     if (paymentMethod === 'mercado_pago') {

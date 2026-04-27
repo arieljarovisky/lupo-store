@@ -211,7 +211,10 @@ export async function enviosFetchRates(params: {
   const destinationState = isCabaDestination(params.destination?.city, params.postalCodeDestination)
     ? 'C'
     : destinationStateRaw;
-  const endpoint = process.env.ENVIOS_RATES_PATH?.trim() || '/ship/rate';
+  const endpoint = process.env.ENVIOS_RATES_PATH?.trim() || '/ship/rate/';
+  const shipmentType = Math.max(1, Math.floor(Number(process.env.ENVIOS_RATE_SHIPMENT_TYPE ?? '1') || 1));
+  const rateCarrier = process.env.ENVIOS_RATE_CARRIER?.trim() || 'correoArgentino';
+  const rateService = process.env.ENVIOS_RATE_SERVICE?.trim() || undefined;
   const originName = process.env.ENVIOS_ORIGIN_NAME?.trim();
   const originPhone = process.env.ENVIOS_ORIGIN_PHONE?.trim();
   const originStreet = process.env.ENVIOS_ORIGIN_STREET?.trim();
@@ -248,12 +251,28 @@ export async function enviosFetchRates(params: {
     },
     packages: [
       {
+        type: process.env.ENVIOS_PACKAGE_TYPE?.trim() || 'box',
+        content: process.env.ENVIOS_PACKAGE_CONTENT?.trim() || 'Ropa',
+        amount: 1,
+        declaredValue: Math.max(0, Math.round(Number(process.env.ENVIOS_DECLARED_VALUE_ARS ?? '0') || 0)),
+        lengthUnit: 'CM',
+        weightUnit: 'KG',
         weight: weightKg,
-        length: params.dimensions.length,
-        width: params.dimensions.width,
-        height: params.dimensions.height,
+        dimensions: {
+          length: params.dimensions.length,
+          width: params.dimensions.width,
+          height: params.dimensions.height,
+        },
       },
     ],
+    shipment: {
+      type: shipmentType,
+      carrier: rateCarrier,
+      ...(rateService ? { service: rateService } : {}),
+    },
+    settings: {
+      currency: process.env.ENVIOS_RATE_CURRENCY?.trim() || 'ARS',
+    },
   };
 
   const url = `${enviosBaseUrl()}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;

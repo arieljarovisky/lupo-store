@@ -120,6 +120,7 @@ export async function enviosFetchRates(params: {
   postalCodeOrigin: string;
   postalCodeDestination: string;
   dimensions: { weight: number; height: number; width: number; length: number };
+  destination?: { city?: string | null; state?: string | null };
 }): Promise<EnviosRate[]> {
   const token = process.env.ENVIOS_API_TOKEN?.trim();
   if (!token) {
@@ -127,21 +128,35 @@ export async function enviosFetchRates(params: {
   }
   const country = process.env.ENVIOS_COUNTRY_CODE?.trim() || 'AR';
   const endpoint = process.env.ENVIOS_RATES_PATH?.trim() || '/ship/rate';
+  const weightKgRaw = Number(params.dimensions.weight) / 1000;
+  const weightKg = Number.isFinite(weightKgRaw) && weightKgRaw > 0 ? Number(weightKgRaw.toFixed(2)) : 1;
   const body = {
     origin: {
+      name: process.env.ENVIOS_ORIGIN_NAME?.trim() || 'Origen',
+      company: process.env.ENVIOS_ORIGIN_COMPANY?.trim() || undefined,
+      email: process.env.ENVIOS_ORIGIN_EMAIL?.trim() || undefined,
+      phone: process.env.ENVIOS_ORIGIN_PHONE?.trim() || undefined,
+      street: process.env.ENVIOS_ORIGIN_STREET?.trim() || undefined,
+      number: process.env.ENVIOS_ORIGIN_NUMBER?.trim() || undefined,
+      district: process.env.ENVIOS_ORIGIN_DISTRICT?.trim() || undefined,
+      city: process.env.ENVIOS_ORIGIN_CITY?.trim() || undefined,
+      state: process.env.ENVIOS_ORIGIN_STATE?.trim() || undefined,
       postalCode: params.postalCodeOrigin,
       country,
     },
     destination: {
+      name: process.env.ENVIOS_DESTINATION_NAME_FALLBACK?.trim() || 'Cliente',
+      city: params.destination?.city?.trim() || undefined,
+      state: params.destination?.state?.trim() || undefined,
       postalCode: params.postalCodeDestination,
       country,
     },
     packages: [
       {
-        content: process.env.ENVIOS_PACKAGE_CONTENT?.trim() || 'Ropa',
-        amount: 1,
-        type: process.env.ENVIOS_PACKAGE_TYPE?.trim() || 'box',
-        dimensions: params.dimensions,
+        weight: weightKg,
+        length: params.dimensions.length,
+        width: params.dimensions.width,
+        height: params.dimensions.height,
       },
     ],
   };

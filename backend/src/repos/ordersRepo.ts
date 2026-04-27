@@ -317,6 +317,10 @@ export async function quoteCheckoutShipping(params: {
       postalCodeOrigin: origin,
       postalCodeDestination: zipcode,
       dimensions,
+        destination: {
+          city: params.address.city ?? null,
+          state: params.address.province ?? null,
+        },
     });
     const options: CheckoutShippingQuoteOption[] = rows.map((r) => ({
       id: `envios:${r.id}`,

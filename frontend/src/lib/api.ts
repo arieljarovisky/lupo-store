@@ -351,11 +351,11 @@ export interface AdminOrder {
   }>;
 }
 
-export type CheckoutShippingEngine = 'micorreo' | 'local';
+export type CheckoutShippingEngine = 'micorreo' | 'envios' | 'local';
 
 export interface CheckoutShippingQuoteOption {
   id: string;
-  provider: 'tiendanube' | 'micorreo';
+  provider: 'tiendanube' | 'micorreo' | 'envios';
   carrier: 'correo_argentino';
   label: string;
   cost: number;
@@ -411,7 +411,8 @@ export async function quoteCheckoutShipping(params: {
       currency: String(data.currency ?? 'ARS'),
       subtotal: Number(data.subtotal ?? 0),
       options: data.options,
-      shippingEngine: data.shippingEngine === 'micorreo' ? 'micorreo' : 'local',
+      shippingEngine:
+        data.shippingEngine === 'micorreo' || data.shippingEngine === 'envios' ? data.shippingEngine : 'local',
     };
   } catch (e) {
     if (e instanceof TypeError) return { ok: false, error: networkFetchErrorMessage(url, e) };

@@ -826,7 +826,9 @@ export function Checkout() {
               <p className="text-[13px] text-lupo-text mb-5">
                 {shippingEngine === 'micorreo'
                   ? 'Cotización con la API oficial MiCorreo de Correo Argentino según tu código postal, tipo de entrega y sucursal si retirás.'
-                  : 'Calculamos opciones de envío según tu dirección (modo local si MiCorreo no está configurado en el servidor).'}
+                  : shippingEngine === 'envios'
+                    ? 'Cotización en tiempo real con envios.com según tu código postal.'
+                    : 'Calculamos opciones de envío según tu dirección (modo local si no hay proveedor externo configurado en el servidor).'}
               </p>
 
               {shippingEngine === 'micorreo' && (

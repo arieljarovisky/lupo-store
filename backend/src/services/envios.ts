@@ -54,38 +54,38 @@ function parseCurrency(raw: unknown): number {
 function normalizeArgentinaStateCode(raw: string | null | undefined): string | undefined {
   const v = String(raw ?? '').trim();
   if (!v) return undefined;
-  if (/^AR-[A-Z]$/i.test(v)) return v.toUpperCase();
-  if (/^[A-Z]$/i.test(v)) return `AR-${v.toUpperCase()}`;
+  if (/^AR-[A-Z]$/i.test(v)) return v.slice(-1).toUpperCase();
+  if (/^[A-Z]$/i.test(v)) return v.toUpperCase();
   const key = v
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
   const map: Record<string, string> = {
-    'ciudad autonoma de buenos aires': 'AR-C',
-    caba: 'AR-C',
-    'buenos aires': 'AR-B',
-    catamarca: 'AR-K',
-    chaco: 'AR-H',
-    chubut: 'AR-U',
-    cordoba: 'AR-X',
-    corrientes: 'AR-W',
-    'entre rios': 'AR-E',
-    formosa: 'AR-P',
-    jujuy: 'AR-Y',
-    'la pampa': 'AR-L',
-    'la rioja': 'AR-F',
-    mendoza: 'AR-M',
-    misiones: 'AR-N',
-    neuquen: 'AR-Q',
-    'rio negro': 'AR-R',
-    salta: 'AR-A',
-    'san juan': 'AR-J',
-    'san luis': 'AR-D',
-    'santa cruz': 'AR-Z',
-    'santa fe': 'AR-S',
-    'santiago del estero': 'AR-G',
-    'tierra del fuego': 'AR-V',
-    tucuman: 'AR-T',
+    'ciudad autonoma de buenos aires': 'C',
+    caba: 'C',
+    'buenos aires': 'B',
+    catamarca: 'K',
+    chaco: 'H',
+    chubut: 'U',
+    cordoba: 'X',
+    corrientes: 'W',
+    'entre rios': 'E',
+    formosa: 'P',
+    jujuy: 'Y',
+    'la pampa': 'L',
+    'la rioja': 'F',
+    mendoza: 'M',
+    misiones: 'N',
+    neuquen: 'Q',
+    'rio negro': 'R',
+    salta: 'A',
+    'san juan': 'J',
+    'san luis': 'D',
+    'santa cruz': 'Z',
+    'santa fe': 'S',
+    'santiago del estero': 'G',
+    'tierra del fuego': 'V',
+    tucuman: 'T',
   };
   return map[key];
 }

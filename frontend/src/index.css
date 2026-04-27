@@ -23,6 +23,22 @@
   a {
     @apply transition-colors duration-200;
   }
+
+  input,
+  textarea {
+    caret-color: #1a1a1a;
+    cursor: text;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus {
+    -webkit-text-fill-color: #1a1a1a;
+    caret-color: #1a1a1a;
+  }
 }
 
 @layer utilities {
